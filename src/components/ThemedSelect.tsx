@@ -47,6 +47,10 @@ export function ThemedSelect({
   const [searchQuery, setSearchQuery] = useState('')
   const [coords, setCoords] = useState<DropdownCoords | null>(null)
 
+  // Type-ahead: accumulate keypresses, auto-clear after 800ms
+  const typeaheadRef = useRef('')
+  const typeaheadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const triggerRef = useRef<HTMLButtonElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -132,9 +136,15 @@ export function ThemedSelect({
       document.addEventListener('touchstart', handleClickOutside)
       if (searchable) {
         setTimeout(() => searchInputRef.current?.focus(), 40)
+      } else {
+        // When not searchable, focus the listbox so arrow keys work
+        setTimeout(() => listRef.current?.focus(), 40)
       }
     } else {
       setSearchQuery('')
+      // Clear type-ahead buffer
+      typeaheadRef.current = ''
+      if (typeaheadTimerRef.current) clearTimeout(typeaheadTimerRef.current)
     }
 
     return () => {
@@ -153,6 +163,31 @@ export function ThemedSelect({
     }
   }, [highlightedIndex, isOpen])
 
+  // Type-ahead: find first option whose label starts with the accumulated buffer
+  const handleTypeahead = useCallback((char: string) => {
+    typeaheadRef.current += char.toLowerCase()
+    if (typeaheadTimerRef.current) clearTimeout(typeaheadTimerRef.current)
+    typeaheadTimerRef.current = setTimeout(() => {
+      typeaheadRef.current = ''
+    }, 800)
+
+    const buf = typeaheadRef.current
+    // Priority: starts-with match, then contains
+    const idx = filteredOptions.findIndex((o) => o.label.toLowerCase().startsWith(buf))
+    if (idx >= 0) {
+      setHighlightedIndex(idx)
+    } else {
+      const containsIdx = filteredOptions.findIndex((o) => o.label.toLowerCase().includes(buf))
+      if (containsIdx >= 0) setHighlightedIndex(containsIdx)
+    }
+  }, [filteredOptions])
+
+  const closeAndReturnFocus = useCallback(() => {
+    setIsOpen(false)
+    // Return focus to trigger button
+    setTimeout(() => triggerRef.current?.focus(), 10)
+  }, [])
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!isOpen) {
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ') {
@@ -164,30 +199,74 @@ export function ThemedSelect({
       return
     }
 
-    if (e.key === 'Escape' || e.key === 'Tab') {
-      setIsOpen(false)
-      return
-    }
+    switch (e.key) {
+      case 'Escape':
+      case 'Tab':
+        e.preventDefault()
+        closeAndReturnFocus()
+        break
 
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      setHighlightedIndex((prev) => (prev < filteredOptions.length - 1 ? prev + 1 : 0))
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : filteredOptions.length - 1))
-    } else if (e.key === 'Enter') {
-      e.preventDefault()
-      const targetIdx = highlightedIndex >= 0 ? highlightedIndex : 0
-      if (filteredOptions[targetIdx]) {
-        onChange(filteredOptions[targetIdx].value)
-        setIsOpen(false)
-      }
+      case 'ArrowDown':
+        e.preventDefault()
+        setHighlightedIndex((prev) => (prev < filteredOptions.length - 1 ? prev + 1 : 0))
+        break
+
+      case 'ArrowUp':
+        e.preventDefault()
+        setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : filteredOptions.length - 1))
+        break
+
+      case 'Home':
+        e.preventDefault()
+        setHighlightedIndex(0)
+        break
+
+      case 'End':
+        e.preventDefault()
+        setHighlightedIndex(filteredOptions.length - 1)
+        break
+
+      case 'Enter':
+      case ' ':
+        e.preventDefault()
+        {
+          const targetIdx = highlightedIndex >= 0 ? highlightedIndex : 0
+          if (filteredOptions[targetIdx]) {
+            onChange(filteredOptions[targetIdx].value)
+            closeAndReturnFocus()
+          }
+        }
+        break
+
+      default:
+        // Type-ahead (only when not in search mode, to avoid interfering with search input)
+        if (!searchable && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          handleTypeahead(e.key)
+        }
+        break
+    }
+  }
+
+  // Handler specifically for search input — forward nav keys upward, handle Escape
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    switch (e.key) {
+      case 'ArrowDown':
+      case 'ArrowUp':
+      case 'Enter':
+      case 'Home':
+      case 'End':
+        handleKeyDown(e as unknown as React.KeyboardEvent)
+        break
+      case 'Escape':
+        e.preventDefault()
+        closeAndReturnFocus()
+        break
     }
   }
 
   const selectOption = (optValue: string) => {
     onChange(optValue)
-    setIsOpen(false)
+    closeAndReturnFocus()
   }
 
   return (
@@ -258,11 +337,7 @@ export function ThemedSelect({
                         setSearchQuery(e.target.value)
                         setHighlightedIndex(0)
                       }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') {
-                          handleKeyDown(e)
-                        }
-                      }}
+                      onKeyDown={handleSearchKeyDown}
                     />
                   </div>
                 )}

@@ -298,7 +298,11 @@ function App() {
         setShowAuth(false)
         const cached = await idbStorage.loadUserData(user.id) || storage.read()
         setData(cached)
-        const fresh = await cloudSync.pull(user, cached)
+        let fresh = await cloudSync.pull(user, cached)
+        // Restore nickname from cloud user profile if local name is blank
+        if (!fresh.settings.name && user.name) {
+          fresh = { ...fresh, settings: { ...fresh.settings, name: user.name } }
+        }
         setData(fresh)
         const count = await cloudSync.checkGuestDataForMigration(user.id)
         if (count > 0) setMigrationTxCount(count)
@@ -320,7 +324,11 @@ function App() {
           cloudSync.setUser(user)
           const cached = await idbStorage.loadUserData(user.id)
           if (cached) setData(cached)
-          const fresh = await cloudSync.pull(user, cached || storage.read())
+          let fresh = await cloudSync.pull(user, cached || storage.read())
+          // Restore nickname from cloud user profile if local name is blank
+          if (!fresh.settings.name && user.name) {
+            fresh = { ...fresh, settings: { ...fresh.settings, name: user.name } }
+          }
           setData(fresh)
           const count = await cloudSync.checkGuestDataForMigration(user.id)
           if (count > 0) setMigrationTxCount(count)
@@ -992,7 +1000,224 @@ function BudgetPage({
   )
 }
 
-function StatsPage({data}:{data:FinanceData}) {const current=snapshot(data.transactions,data.settings);const f=(n:number)=>formatMoney(n,data.settings.currency);const [selected,setSelected]=useState(monthKey()); const months=Array.from({length:6},(_,i)=>{const d=new Date();d.setMonth(d.getMonth()-5+i);return monthKey(d)});const selectedStats=snapshot(data.transactions,data.settings,selected);const cats=data.settings.categories||categories;const spending=cats.map(c=>({name:c,value:categorySpend(data.transactions,c,selected)})).filter(x=>x.value>0);const max=Math.max(...months.map(m=>snapshot(data.transactions,data.settings,m).expenses),1);return <div className="stats-page"><div className="page-heading"><div><p className="eyebrow">Make it visible</p><h1>Stats</h1><p>Patterns that help you make calmer decisions.</p></div><div style={{minWidth:140}}><ThemedSelect ariaLabel="Select month" value={selected} onChange={v=>setSelected(v)} options={months.map(m=>({value:m,label:m,icon:<CalendarDays size={14}/>}))} compact/></div></div><section className="stats-summary"><Metric label="Income" value={f(selectedStats.income)} detail="In this month" icon={<ArrowDownLeft size={18}/>} tone="positive"/><Metric label="Expenses" value={f(selectedStats.expenses)} detail="Spent this month" icon={<ArrowUpRight size={18}/>} tone="negative"/><Metric label="Remaining" value={f(selectedStats.balance)} detail="After dues" icon={<WalletCards size={18}/>} tone="neutral"/></section><div className="chart-grid"><section className="chart-card"><div className="chart-head"><div><p className="eyebrow">Income vs expense</p><h2>This month</h2></div><BarChart3 size={20}/></div><div className="compare-bars"><Bar label="Income" value={selectedStats.income} max={Math.max(selectedStats.income,selectedStats.expenses,1)} tone="positive"/><Bar label="Expenses" value={selectedStats.expenses} max={Math.max(selectedStats.income,selectedStats.expenses,1)} tone="negative"/></div></section><section className="chart-card"><div className="chart-head"><div><p className="eyebrow">Budget utilization</p><h2>Monthly plan</h2></div><PieChart size={20}/></div>{current.budget?<div className="donut-wrap"><div className="donut" style={{'--percent':`${Math.min(100,current.budgetUsed)}%`} as React.CSSProperties}><div><b>{Math.round(current.budgetUsed)}%</b><span>used</span></div></div><div><strong>{f(current.budgetRemaining)}</strong><p>still available to spend</p></div></div>:<div className="chart-empty">Set a budget to track progress.</div>}</section><section className="chart-card wide"><div className="chart-head"><div><p className="eyebrow">Spending pattern</p><h2>Last 6 months</h2></div><span className="muted">Expense total</span></div><div className="monthly-bars">{months.map(m=>{const val=snapshot(data.transactions,data.settings,m).expenses;return <div key={m}><div className="bar-track"><motion.span initial={{height:0}} animate={{height:`${val/max*100}%`}}/></div><small>{new Date(m+'-01T12:00:00').toLocaleDateString(undefined,{month:'short'})}</small></div>})}</div></section><section className="chart-card wide"><div className="chart-head"><div><p className="eyebrow">Where it went</p><h2>Category spending</h2></div></div>{spending.length?<div className="category-chart">{spending.map((x,i)=><div key={x.name}><div><span><i style={{background:`var(--chart-${i%5})`}}></i>{x.name}</span><b>{f(x.value)}</b></div><Progress value={x.value/Math.max(...spending.map(s=>s.value))*100} state="normal"/></div>)}</div>:<div className="chart-empty">Expense categories will appear here.</div>}</section></div></div>}
+function StatsPage({ data }: { data: FinanceData }) {
+  const f = (n: number) => formatMoney(n, data.settings.currency)
+  const [selected, setSelected] = useState(monthKey())
+
+  // Last 6 months array (oldest first)
+  const months = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date()
+    d.setDate(1)
+    d.setMonth(d.getMonth() - 5 + i)
+    return monthKey(d)
+  })
+
+  // Human-readable month label: "Sep 2026"
+  const monthLabel = (key: string) =>
+    new Date(key + '-01T12:00:00').toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
+
+  // Per-month stats — independent of startingBalance
+  const monthStats = (key: string) => {
+    const income = data.transactions
+      .filter(t => t.type === 'income' && t.date.slice(0, 7) === key)
+      .reduce((n, t) => n + t.amount, 0)
+    const expenses = data.transactions
+      .filter(t => t.type === 'expense' && t.date.slice(0, 7) === key)
+      .reduce((n, t) => n + t.amount, 0)
+    const dues = data.transactions
+      .filter(t => t.type === 'due' && t.date.slice(0, 7) === key)
+      .reduce((n, t) => n + t.amount, 0)
+    const hasData = data.transactions.some(t => t.date.slice(0, 7) === key)
+    return { income, expenses, dues, net: income - expenses - dues, hasData }
+  }
+
+  const sel = monthStats(selected)
+  const budgetForSelected = data.settings.monthlyBudget
+  const budgetUsedPct = budgetForSelected > 0 ? Math.min(100, sel.expenses / budgetForSelected * 100) : 0
+  const budgetRemaining = budgetForSelected > 0 ? Math.max(0, budgetForSelected - sel.expenses) : 0
+
+  // Category spending for selected month, sorted highest→lowest
+  const cats = data.settings.categories || categories
+  const spending = cats
+    .map(c => ({ name: c, value: categorySpend(data.transactions, c, selected) }))
+    .filter(x => x.value > 0)
+    .sort((a, b) => b.value - a.value)
+  const totalExpenseForPct = spending.reduce((n, x) => n + x.value, 0)
+
+  // Bar chart: max across all 6 months expenses
+  const monthExpenses = months.map(m => monthStats(m).expenses)
+  const barMax = Math.max(...monthExpenses, 1)
+
+  return (
+    <div className="stats-page">
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">Make it visible</p>
+          <h1>Stats</h1>
+          <p>Patterns that help you make calmer decisions.</p>
+        </div>
+        <div style={{ minWidth: 160 }}>
+          <ThemedSelect
+            ariaLabel="Select month"
+            value={selected}
+            onChange={v => setSelected(v)}
+            options={months.map(m => ({ value: m, label: monthLabel(m), icon: <CalendarDays size={14} /> }))}
+            compact
+          />
+        </div>
+      </div>
+
+      <section className="stats-summary">
+        <Metric label="Income" value={f(sel.income)} detail={monthLabel(selected)} icon={<ArrowDownLeft size={18} />} tone="positive" />
+        <Metric label="Expenses" value={f(sel.expenses)} detail={monthLabel(selected)} icon={<ArrowUpRight size={18} />} tone="negative" />
+        <Metric
+          label="Net"
+          value={sel.net >= 0 ? `+${f(sel.net)}` : f(sel.net)}
+          detail="Income minus expenses"
+          icon={<WalletCards size={18} />}
+          tone={sel.net >= 0 ? 'positive' : 'negative'}
+        />
+      </section>
+
+      <div className="chart-grid">
+        {/* Income vs Expense */}
+        <section className="chart-card">
+          <div className="chart-head">
+            <div>
+              <p className="eyebrow">Income vs expense</p>
+              <h2>{monthLabel(selected)}</h2>
+            </div>
+            <BarChart3 size={20} />
+          </div>
+          <div className="compare-bars">
+            <Bar label="Income" value={sel.income} max={Math.max(sel.income, sel.expenses, 1)} tone="positive" />
+            <Bar label="Expenses" value={sel.expenses} max={Math.max(sel.income, sel.expenses, 1)} tone="negative" />
+            <div className="compare-row" style={{ marginTop: 4, opacity: 0.75 }}>
+              <span>Net</span>
+              <div className="compare-track" style={{ background: 'transparent' }} />
+              <b style={{ color: sel.net >= 0 ? 'var(--positive)' : 'var(--negative)' }}>
+                {sel.net >= 0 ? '+' : ''}{f(sel.net)}
+              </b>
+            </div>
+          </div>
+        </section>
+
+        {/* Budget utilization — uses selected month's expenses */}
+        <section className="chart-card">
+          <div className="chart-head">
+            <div>
+              <p className="eyebrow">Budget utilization</p>
+              <h2>{monthLabel(selected)}</h2>
+            </div>
+            <PieChart size={20} />
+          </div>
+          {budgetForSelected > 0 ? (
+            <div className="donut-wrap">
+              <div
+                className="donut"
+                style={{ '--percent': `${budgetUsedPct}%` } as React.CSSProperties}
+              >
+                <div>
+                  <b>{Math.round(budgetUsedPct)}%</b>
+                  <span>used</span>
+                </div>
+              </div>
+              <div>
+                <strong>{f(budgetRemaining)}</strong>
+                <p>still available</p>
+              </div>
+            </div>
+          ) : (
+            <div className="chart-empty">Set a monthly budget in Settings to track progress.</div>
+          )}
+        </section>
+
+        {/* Last 6 months bar chart */}
+        <section className="chart-card wide">
+          <div className="chart-head">
+            <div>
+              <p className="eyebrow">Spending pattern</p>
+              <h2>Last 6 months</h2>
+            </div>
+            <span className="muted">Expense total</span>
+          </div>
+          <div className="monthly-bars">
+            {months.map(m => {
+              const ms = monthStats(m)
+              const heightPct = ms.hasData ? ms.expenses / barMax * 100 : 0
+              const isSelected = m === selected
+              return (
+                <div
+                  key={m}
+                  style={{ cursor: 'pointer', opacity: isSelected ? 1 : 0.75 }}
+                  onClick={() => setSelected(m)}
+                  title={ms.hasData ? `${monthLabel(m)}: ${f(ms.expenses)}` : `${monthLabel(m)}: No data`}
+                >
+                  <div
+                    className="bar-track"
+                    style={isSelected ? { outline: '2px solid var(--accent)', outlineOffset: 2, borderRadius: 7 } : {}}
+                  >
+                    {ms.hasData ? (
+                      <motion.span
+                        initial={{ height: 0 }}
+                        animate={{ height: `${heightPct}%` }}
+                        transition={{ duration: 0.5, ease: [0.34, 1.04, 0.64, 1] }}
+                        style={isSelected ? { background: 'var(--accent)' } : {}}
+                      />
+                    ) : null}
+                  </div>
+                  <small style={isSelected ? { color: 'var(--accent)', fontWeight: 700 } : {}}>
+                    {new Date(m + '-01T12:00:00').toLocaleDateString(undefined, { month: 'short' })}
+                  </small>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+
+        {/* Category spending */}
+        <section className="chart-card wide">
+          <div className="chart-head">
+            <div>
+              <p className="eyebrow">Where it went</p>
+              <h2>Category spending</h2>
+            </div>
+          </div>
+          {spending.length > 0 ? (
+            <div className="category-chart">
+              {spending.map((x, i) => {
+                const pct = totalExpenseForPct > 0 ? (x.value / totalExpenseForPct * 100).toFixed(1) : '0'
+                return (
+                  <div key={x.name}>
+                    <div>
+                      <span>
+                        <i style={{ background: `var(--chart-${i % 5})` }} />
+                        {x.name}
+                      </span>
+                      <b>
+                        {f(x.value)}
+                        {totalExpenseForPct > 0 && (
+                          <span style={{ fontWeight: 400, color: 'var(--muted)', marginLeft: 5, fontSize: 11 }}>
+                            · {pct}%
+                          </span>
+                        )}
+                      </b>
+                    </div>
+                    <Progress value={x.value / Math.max(...spending.map(s => s.value)) * 100} state="normal" />
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="chart-empty">
+              {sel.hasData ? 'No expense categories found for this month.' : 'No transactions in this month.'}
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  )
+}
 function Bar({label,value,max,tone}:{label:string;value:number;max:number;tone:string}){return <div className="compare-row"><span>{label}</span><div className="compare-track"><motion.i className={tone} initial={{width:0}} animate={{width:`${value/max*100}%`}}/></div><b>{value?formatMoney(value):'—'}</b></div>}
 
 function ConfigPage({
@@ -1147,7 +1372,18 @@ function ConfigPage({
 
       <ConfigSection title="Profile">
         <SettingRow icon={<CircleDollarSign size={18}/>} title="Your name" detail="Personalize your greeting">
-          <input className="setting-input" value={data.settings.name} onChange={e=>setSettings({name:e.target.value})} placeholder="Add name"/>
+          <input
+            className="setting-input"
+            value={data.settings.name}
+            onChange={e => setSettings({ name: e.target.value })}
+            onBlur={e => {
+              const name = e.target.value.trim()
+              if (currentUser && name) {
+                authService.updateProfile(name).catch(() => {})
+              }
+            }}
+            placeholder="Add name"
+          />
         </SettingRow>
         <SettingRow icon={<WalletCards size={18}/>} title="Currency" detail="Used throughout THOGAI">
           <div style={{minWidth:160,maxWidth:190}}>
@@ -1645,16 +1881,34 @@ function CategoriesModal({
 }) {
   const [activeTab, setActiveTab] = useState<'expense' | 'income'>('expense')
   const [newCat, setNewCat] = useState('')
+  const [crossListWarning, setCrossListWarning] = useState('')
 
   const cats = activeTab === 'expense' ? expenseCats : incomeCats
+  const oppositeCats = activeTab === 'expense' ? incomeCats : expenseCats
 
   const addCategory = () => {
     const trimmed = newCat.trim()
     if (!trimmed) return
-    if (cats.some((c) => c.toLowerCase() === trimmed.toLowerCase())) {
-      toast('Category already exists')
+
+    const norm = (s: string) => s.trim().toLowerCase()
+
+    // Hard block: already in same list
+    if (cats.some((c) => norm(c) === norm(trimmed))) {
+      toast(`"${trimmed}" already exists in ${activeTab} categories`)
       return
     }
+
+    // Soft warn: exists in opposite list
+    const existsInOpposite = oppositeCats.find((c) => norm(c) === norm(trimmed))
+    if (existsInOpposite && !crossListWarning) {
+      setCrossListWarning(
+        `"${existsInOpposite}" already exists as a ${activeTab === 'expense' ? 'Income' : 'Expense'} category. Add it here too?`
+      )
+      return
+    }
+
+    // Proceed
+    setCrossListWarning('')
     if (activeTab === 'expense') {
       onUpdateExpense([...expenseCats, trimmed])
     } else {
@@ -1773,7 +2027,7 @@ function CategoriesModal({
       >
         <input
           value={newCat}
-          onChange={(e) => setNewCat(e.target.value)}
+          onChange={(e) => { setNewCat(e.target.value); setCrossListWarning('') }}
           placeholder={
             activeTab === 'expense'
               ? 'Add expense category (e.g. Fuel, Groceries)...'
@@ -1788,6 +2042,28 @@ function CategoriesModal({
           <Plus size={15} /> Add
         </button>
       </form>
+      {crossListWarning && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 2px', fontSize: 12.5, color: 'var(--warning)' }}>
+          <ShieldAlert size={14} style={{ flex: 'none' }} />
+          <span style={{ flex: 1 }}>{crossListWarning}</span>
+          <button
+            type="button"
+            className="button compact ghost"
+            style={{ fontSize: 12, minHeight: 30 }}
+            onClick={addCategory}
+          >
+            Add anyway
+          </button>
+          <button
+            type="button"
+            className="text-button"
+            style={{ fontSize: 12 }}
+            onClick={() => setCrossListWarning('')}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
       <div
         className="modal-actions"
         style={{
