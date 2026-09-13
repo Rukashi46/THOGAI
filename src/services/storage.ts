@@ -15,6 +15,64 @@ export interface Transaction {
   updatedAt: string
 }
 export interface Budget { id: string; category: string; limit: number; period: Period; createdAt: string; updatedAt: string }
+
+// ─── Reconciliation Types ─────────────────────────────────────────────────────
+export interface StatementTransaction {
+  id: string
+  date: string
+  description: string
+  amount: number
+  direction: 'debit' | 'credit'
+  runningBalance?: number
+  reference?: string
+  rawNarration?: string
+}
+
+export type ReconciliationMatchType =
+  | 'matched'
+  | 'needs_review'
+  | 'amount_mismatch'
+  | 'date_mismatch'
+  | 'missing_in_thogai'
+  | 'missing_from_statement'
+  | 'possible_duplicate'
+
+export interface ReconciliationMatch {
+  id: string
+  statementTx?: StatementTransaction
+  thogaiTx?: Transaction
+  matchType: ReconciliationMatchType
+  verified: boolean
+  confidence: number
+}
+
+export interface ReconciliationSession {
+  id: string
+  account: string
+  startDate: string
+  endDate: string
+  statementOpeningBalance?: number
+  statementClosingBalance?: number
+  statementTransactions: StatementTransaction[]
+  matches: ReconciliationMatch[]
+  status: 'selecting' | 'uploading' | 'reviewing' | 'completed'
+  createdAt: string
+}
+
+export interface ReconciliationRecord {
+  id: string
+  account: string
+  startDate: string
+  endDate: string
+  reconciliationDate: string
+  statementClosingBalance: number
+  thogaiReconciledBalance: number
+  difference: number
+  transactionsChecked: number
+  transactionsMatched: number
+}
+
+// ─── Settings ─────────────────────────────────────────────────────────────────
 export interface Settings {
   name: string
   currency: string
@@ -31,6 +89,8 @@ export interface Settings {
   incomeCategories: string[]
   accounts: string[]
   defaultAccount: string
+  onboardingCompleted: boolean
+  nickname: string
 }
 export interface FinanceData { transactions: Transaction[]; budgets: Budget[]; settings: Settings }
 
@@ -103,7 +163,9 @@ export const defaultSettings: Settings = {
   categories: defaultExpenseCategories,
   incomeCategories: defaultIncomeCategories,
   accounts: defaultAccounts,
-  defaultAccount: 'Cash'
+  defaultAccount: 'Cash',
+  onboardingCompleted: false,
+  nickname: ''
 }
 const KEY = 'thogai.finance.v1'
 const fallback: FinanceData = { transactions: [], budgets: [], settings: defaultSettings }

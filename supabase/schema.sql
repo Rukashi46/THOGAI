@@ -144,3 +144,32 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+-- 8. Add onboarding and nickname fields to user_settings
+alter table public.user_settings
+  add column if not exists onboarding_completed boolean default false,
+  add column if not exists nickname text default '',
+  add column if not exists income_categories text[] default array['Salary','Freelance','Business Income','Refund','Cashback','Interest','Bonus','Gift','Friend Repayment','Asset Sale','Other'];
+
+-- 9. Reconciliation History Table
+create table if not exists public.reconciliation_history (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  account text not null,
+  start_date text not null,
+  end_date text not null,
+  reconciliation_date text not null,
+  statement_closing_balance numeric,
+  thogai_reconciled_balance numeric,
+  difference numeric,
+  transactions_checked integer default 0,
+  transactions_matched integer default 0,
+  created_at timestamptz default timezone('utc'::text, now()) not null
+);
+
+alter table public.reconciliation_history enable row level security;
+
+create policy "Users can manage own reconciliation history"
+  on public.reconciliation_history for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);

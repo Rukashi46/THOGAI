@@ -273,3 +273,83 @@ export const reducedMotionVariants: Variants = {
   animate: { opacity: 1, transition: { duration: 0.08 } },
   exit: { opacity: 0, transition: { duration: 0.06 } },
 }
+
+// ─── Onboarding Step Transitions ──────────────────────────────────────────────
+//
+// direction: 1  = forward (content enters from right)
+// direction: -1 = backward (content enters from left)
+//
+export const onboardingStepVariants: Variants = {
+  initial: (direction: number = 1) => ({
+    x: direction > 0 ? 28 : -28,
+    opacity: 0,
+    scale: 0.97,
+  }),
+  animate: {
+    x: 0,
+    opacity: 1,
+    scale: 1,
+    transition: {
+      ...iosSpring,
+      opacity: { duration: 0.18, ease: 'easeOut' },
+    },
+  },
+  exit: (direction: number = 1) => ({
+    x: direction > 0 ? -20 : 20,
+    opacity: 0,
+    scale: 0.97,
+    transition: { duration: 0.2, ease: [0.4, 0, 0.6, 1] },
+  }),
+}
+
+/** Stagger container for onboarding content */
+export const onboardingContentVariants: Variants = {
+  animate: {
+    transition: { staggerChildren: 0.06, delayChildren: 0.04 },
+  },
+}
+
+/** Individual onboarding content items (eyebrow, heading, desc, buttons) */
+export const onboardingItemVariants: Variants = {
+  initial: { opacity: 0, y: 10 },
+  animate: {
+    opacity: 1,
+    y: 0,
+    transition: gentleSpring,
+  },
+}
+
+/** Word-by-word text reveal for onboarding headings */
+export const wordRevealContainer: Variants = {
+  initial: {},
+  animate: {
+    transition: { staggerChildren: 0.05, delayChildren: 0.1 },
+  },
+}
+
+export const wordRevealItem: Variants = {
+  initial: { opacity: 0, y: 8, filter: 'blur(3px)' },
+  animate: {
+    opacity: 1,
+    y: 0,
+    filter: 'blur(0px)',
+    transition: {
+      type: 'spring',
+      stiffness: 360,
+      damping: 30,
+      mass: 0.7,
+    },
+  },
+}
+
+// ─── Reconciliation ───────────────────────────────────────────────────────────
+
+/** Verification checkmark animation */
+export const verifyVariants: Variants = {
+  initial: { scale: 0.5, opacity: 0 },
+  animate: {
+    scale: 1,
+    opacity: 1,
+    transition: snapSpring,
+  },
+}

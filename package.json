@@ -14,11 +14,13 @@
     "@vitejs/plugin-react": "latest",
     "framer-motion": "latest",
     "lucide-react": "latest",
+    "pdfjs-dist": "^6.3.289",
     "react": "latest",
     "react-dom": "latest",
     "tailwindcss": "latest",
     "typescript": "latest",
-    "vite": "latest"
+    "vite": "latest",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^26.5.0",

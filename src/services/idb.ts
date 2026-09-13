@@ -116,5 +116,31 @@ export const idbStorage = {
 
   async markDataMigrated(userId: string): Promise<void> {
     await idbSet(`migrated_${userId}`, true)
+  },
+
+  async getReconciliationHistory(userId: string | null): Promise<any[]> {
+    const key = this.getScopedKey(userId, 'reconciliation_history')
+    return (await idbGet<any[]>(key)) || []
+  },
+
+  async saveReconciliationRecord(userId: string | null, record: any): Promise<void> {
+    const history = await this.getReconciliationHistory(userId)
+    const updated = [record, ...history.filter((r: any) => r.id !== record.id)]
+    const key = this.getScopedKey(userId, 'reconciliation_history')
+    await idbSet(key, updated)
+  },
+
+  async getReconciliationSession(userId: string | null): Promise<any | null> {
+    const key = this.getScopedKey(userId, 'active_reconciliation')
+    return await idbGet<any>(key)
+  },
+
+  async saveReconciliationSession(userId: string | null, session: any | null): Promise<void> {
+    const key = this.getScopedKey(userId, 'active_reconciliation')
+    if (session) {
+      await idbSet(key, session)
+    } else {
+      await idbRemove(key)
+    }
   }
 }

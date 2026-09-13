@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   ArrowDownLeft, ArrowUpRight, BarChart3, Bell, CalendarDays, Check, ChevronDown, ChevronRight,
@@ -8,12 +8,16 @@ import {
   RotateCcw, Fingerprint, Sparkles, Send, Bot, ShieldAlert, KeyRound, LockKeyhole, Delete, Cloud,
   CloudOff, RefreshCw, HardDrive, User, Fuel, Zap, Droplets, Wifi, Smartphone, Percent,
   HeartPulse, GraduationCap, Film, Plane, Users, Repeat, Smile, Cookie, Receipt, Briefcase,
-  Laptop, Building2, Coins, Award, Gift, Handshake, PiggyBank, CreditCard
+  Laptop, Building2, Coins, Award, Gift, Handshake, PiggyBank, CreditCard,
+  FileText, Upload, CheckCircle2, AlertCircle, MinusCircle, FileSpreadsheet,
+  Scale, History, ArrowRight, ArrowLeft, ChevronLeft
 } from 'lucide-react'
 import { categorySpend, currencies, formatMoney, groupByDate, labelDate, monthKey, newId, seedBudgets, snapshot, budgetState } from './lib/finance'
 import {
   defaultAccounts, defaultCategories, defaultExpenseCategories, defaultIncomeCategories,
-  defaultSettings, storage, type Budget, type FinanceData, type Settings, type ThemeId,
+  defaultSettings, storage, type Budget, type FinanceData, type ReconciliationRecord,
+  type ReconciliationSession, type ReconciliationMatch, type ReconciliationMatchType,
+  type Settings, type StatementTransaction, type ThemeId,
   type Transaction, type TransactionType
 } from './services/storage'
 import { security } from './services/security'
@@ -26,10 +30,33 @@ import { cloudSync, type SyncState } from './services/cloudSync'
 import { idbStorage } from './services/idb'
 import { isSupabaseConfigured } from './lib/supabase'
 import { AuthScreen } from './components/AuthScreen'
-import { pageVariants, desktopModalVariants, mobileSheetVariants, backdropVariants, buttonTap, primaryButtonTap, reducedMotionVariants, iosSpring, sheetSpring, snapSpring } from './lib/motion'
+import {
+  pageVariants, desktopModalVariants, mobileSheetVariants, backdropVariants,
+  buttonTap, primaryButtonTap, reducedMotionVariants, iosSpring, sheetSpring, snapSpring,
+  onboardingStepVariants, onboardingContentVariants, onboardingItemVariants,
+  wordRevealContainer, wordRevealItem, verifyVariants
+} from './lib/motion'
+import { matchTransactions, calculateReconciliation, filterTransactionsForReconciliation, buildReconciliationRecord } from './services/reconciliation'
+import { parseStatement } from './services/statementParser'
+import { ReconciliationModal } from './components/ReconciliationModal'
+import { ReconciliationHistoryModal } from './components/ReconciliationHistoryModal'
+import { OnboardingModal } from './components/OnboardingModal'
 
 type Page = 'home'|'ledger'|'budget'|'stats'|'config'
-type ModalState = { mode:'transaction'; draft?:Transaction; type?:TransactionType; category?:string } | { mode:'budget'; draft?:Budget } | { mode:'ai' } | { mode:'pin_setup'; nextAction?: 'appLock' | 'biometricLock' | 'changePin' } | { mode:'categories' } | { mode:'accounts' } | { mode:'migration' } | { mode:'privacy' } | { mode:'terms' } | null
+type ModalState =
+  | { mode:'transaction'; draft?:Transaction; type?:TransactionType; category?:string }
+  | { mode:'budget'; draft?:Budget }
+  | { mode:'ai' }
+  | { mode:'pin_setup'; nextAction?: 'appLock' | 'biometricLock' | 'changePin' }
+  | { mode:'categories' }
+  | { mode:'accounts' }
+  | { mode:'migration' }
+  | { mode:'privacy' }
+  | { mode:'terms' }
+  | { mode:'reconcile' }
+  | { mode:'reconciliation_history' }
+  | { mode:'onboarding' }
+  | null
 
 interface ConfirmDialogState {
   title: string
@@ -258,6 +285,7 @@ function App() {
   const [syncState, setSyncState] = useState<SyncState>('idle')
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null)
   const [migrationTxCount, setMigrationTxCount] = useState<number>(0)
+  const [reconciliationHistory, setReconciliationHistory] = useState<ReconciliationRecord[]>([])
 
   const [isLocked, setIsLocked] = useState<boolean>(() => {
     const initialData = storage.read()
@@ -306,9 +334,21 @@ function App() {
         setData(fresh)
         const count = await cloudSync.checkGuestDataForMigration(user.id)
         if (count > 0) setMigrationTxCount(count)
+
+        // Load reconciliation history
+        idbStorage.getReconciliationHistory(user.id).then(setReconciliationHistory).catch(() => {})
+        cloudSync.fetchReconciliationHistory(user).then((cloudH) => {
+          if (cloudH && cloudH.length > 0) setReconciliationHistory(cloudH)
+        }).catch(() => {})
+
+        // Check if first-time onboarding should be presented
+        if (!fresh.settings.onboardingCompleted && fresh.transactions.length === 0) {
+          setModal({ mode: 'onboarding' })
+        }
       } else if (event === 'SIGNED_OUT') {
         setCurrentUser(null)
         cloudSync.setUser(null)
+        setReconciliationHistory([])
         if (isSupabaseConfigured()) {
           setShowAuth(true)
         }
@@ -332,6 +372,15 @@ function App() {
           setData(fresh)
           const count = await cloudSync.checkGuestDataForMigration(user.id)
           if (count > 0) setMigrationTxCount(count)
+
+          idbStorage.getReconciliationHistory(user.id).then(setReconciliationHistory).catch(() => {})
+          cloudSync.fetchReconciliationHistory(user).then((cloudH) => {
+            if (cloudH && cloudH.length > 0) setReconciliationHistory(cloudH)
+          }).catch(() => {})
+
+          if (!fresh.settings.onboardingCompleted && fresh.transactions.length === 0) {
+            setModal({ mode: 'onboarding' })
+          }
         } else {
           if (isSupabaseConfigured()) {
             setShowAuth(true)
@@ -339,6 +388,7 @@ function App() {
             // Local / Offline Mode: load guest IndexedDB
             const guestCached = await idbStorage.loadUserData(null)
             if (guestCached) setData(guestCached)
+            idbStorage.getReconciliationHistory(null).then(setReconciliationHistory).catch(() => {})
           }
         }
       } catch (err) {
@@ -676,6 +726,7 @@ function App() {
                 categories={data.settings.categories || defaultExpenseCategories}
                 open={open}
                 remove={deleteTransaction}
+                onReconcile={() => setModal({ mode: 'reconcile' })}
               />
             )}
             {page === 'budget' && (
@@ -806,6 +857,66 @@ function App() {
         )}
         {modal?.mode === 'privacy' && <PrivacyModal close={() => setModal(null)} />}
         {modal?.mode === 'terms' && <TermsModal close={() => setModal(null)} />}
+        {modal?.mode === 'reconcile' && (
+          <ReconciliationModal
+            accounts={data.settings.accounts || defaultAccounts}
+            defaultAccount={data.settings.defaultAccount || 'Cash'}
+            transactions={data.transactions}
+            currency={data.settings.currency}
+            close={() => setModal(null)}
+            onAddTransaction={(draft) => {
+              setModal({ mode: 'transaction', draft: draft as Transaction })
+            }}
+            onEditTransaction={(tx) => {
+              setModal({ mode: 'transaction', draft: tx })
+            }}
+            onDeleteTransaction={(id) => {
+              deleteTransaction(id)
+            }}
+            onOpenHistory={() => {
+              setModal({ mode: 'reconciliation_history' })
+            }}
+            onSaveRecord={async (record) => {
+              await idbStorage.saveReconciliationRecord(currentUser ? currentUser.id : null, record)
+              if (currentUser) {
+                await cloudSync.syncReconciliationRecord(record, currentUser).catch(() => {})
+              }
+              setReconciliationHistory((prev) => [record, ...prev.filter((r) => r.id !== record.id)])
+            }}
+            toast={setToast}
+            askConfirm={askConfirm}
+          />
+        )}
+        {modal?.mode === 'reconciliation_history' && (
+          <ReconciliationHistoryModal
+            history={reconciliationHistory}
+            currency={data.settings.currency}
+            close={() => setModal(null)}
+          />
+        )}
+        {modal?.mode === 'onboarding' && (
+          <OnboardingModal
+            currentSettings={data.settings}
+            close={() => setModal(null)}
+            onComplete={async ({ settings: patch, initialTransactions }) => {
+              let nextData: FinanceData = {
+                ...data,
+                settings: { ...data.settings, ...patch, onboardingCompleted: true }
+              }
+              if (initialTransactions && initialTransactions.length > 0) {
+                nextData = {
+                  ...nextData,
+                  transactions: [...initialTransactions, ...nextData.transactions]
+                }
+              }
+              save(nextData)
+              if (patch.name && currentUser) {
+                authService.updateProfile(patch.name).catch(() => {})
+              }
+              setToast('Welcome to THOGAI')
+            }}
+          />
+        )}
         {migrationTxCount > 0 && (
           <MigrationModal
             count={migrationTxCount}
@@ -839,7 +950,241 @@ function App() {
 function HomePage({data,snapshot:s,setPage,open,openAi,setSettings}:{data:FinanceData;snapshot:ReturnType<typeof snapshot>;setPage:(p:Page,dir?:number)=>void;open:(t?:TransactionType,c?:string)=>void;openAi:()=>void;setSettings:(p:Partial<Settings>)=>void}) { const h=new Date().getHours(); const greeting=h<12?'Good morning':h<18?'Good afternoon':'Good evening'; const f=(n:number)=>formatMoney(n,data.settings.currency); const has=data.transactions.length>0||data.settings.monthlyBudget>0; const recent=[...data.transactions].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,4); const state=budgetState(s.expenses,s.budget); const insight=s.budget? s.expenses>s.budget?'Your spending is over your monthly budget.':s.budgetRemaining>0?`You have ${f(s.budgetRemaining)} left in this month’s budget.`:'You have reached this month’s budget.':s.expenses?'Every expense is now part of your financial picture.':'Add your first transaction to see an honest overview.'; return <>{!has?<Empty onAction={(x)=>x==='budget'?setPage('budget',1):open(x)}/>:<div className="home-layout"><section className="hero-area"><div className="greeting"><p>{greeting}{data.settings.name?`, ${data.settings.name}`:''}</p><h1>Let’s make today count.</h1></div><div className="insight insight-clickable" onClick={openAi} role="button" tabIndex={0} title="Tap to ask THOGAI AI"><div className="insight-icon"><TrendingUp size={18}/></div><p>{insight}</p><span className="ai-badge"><Sparkles size={11}/> Ask AI</span></div><motion.section className="balance-card" initial={{opacity:0,scale:.98}} animate={{opacity:1,scale:1}}><div className="balance-top"><span>Remaining balance</span><IconButton label={data.settings.hideBalance?'Show balance':'Hide balance'} onClick={()=>setSettings({hideBalance:!data.settings.hideBalance})}>{data.settings.hideBalance?<EyeOff size={18}/>:<Eye size={18}/>}</IconButton></div><h2>{data.settings.hideBalance?'••••••':f(s.balance)}</h2><div className="balance-foot"><span><span className="dot"></span>Available this month</span><span>{s.income?`${Math.round((s.balance/s.income)*100)}% retained`:''}</span></div></motion.section></section><section className="summary-grid"><Metric label="Income" value={f(s.income)} detail="Money in" icon={<ArrowDownLeft size={18}/>} tone="positive"/><Metric label="Expenses" value={f(s.expenses)} detail="Money spent" icon={<ArrowUpRight size={18}/>} tone="negative"/><Metric label="Previous dues" value={f(s.dues)} detail="Separate from expenses" icon={<Landmark size={18}/>} tone="neutral"/><Metric label="Paid out" value={f(s.paidOut)} detail="Expenses + dues" icon={<CircleDollarSign size={18}/>} tone="neutral"/></section><section className="section-block budget-overview"><div className="section-title"><div><p className="eyebrow">Monthly plan</p><h2>Budget overview</h2></div><button className="text-button" onClick={()=>setPage('budget',1)}>Manage <ChevronRight size={15}/></button></div>{s.budget?<><div className="budget-main"><div><strong>{f(s.expenses)} <span>of {f(s.budget)}</span></strong><p>{f(s.budgetRemaining)} remaining</p></div><b className={`percentage ${state}`}>{Math.round(s.budgetUsed)}% used</b></div><Progress value={s.budgetUsed} state={state}/></>:<div className="inline-empty"><p>Give every rupee a job with a monthly budget.</p><button className="button compact" onClick={()=>setPage('budget',1)}>Set budget</button></div>}</section><section className="section-block"><div className="section-title"><div><p className="eyebrow">Spend smarter</p><h2>Quick expense</h2></div><span className="muted">One tap to start</span></div><div className="quick-grid">{['Food & Dining','Groceries','Transport','Fuel','Snacks'].map(c=>{const I=categoryIcons[c]??ReceiptText;return <button key={c} onClick={()=>open('expense',c)}><span><I size={20}/></span>{c}</button>})}</div></section><section className="section-block recent"><div className="section-title"><div><p className="eyebrow">Your activity</p><h2>Recent transactions</h2></div><button className="text-button" onClick={()=>setPage('ledger',1)}>See all <ChevronRight size={15}/></button></div>{recent.length?<div className="transactions mini">{recent.map(t=><TransactionRow key={t.id} tx={t} currency={data.settings.currency}/>)}</div>:<p className="muted pad">No transactions yet.</p>}</section></div>}</> }
 function Metric({label,value,detail,icon,tone}:{label:string;value:string;detail:string;icon:React.ReactNode;tone:string}) {return <div className="metric"><span className={`metric-icon ${tone}`}>{icon}</span><div><p>{label}</p><strong>{value}</strong><small>{detail}</small></div></div>}
 
-function Ledger({transactions,currency,categories:cats,open,remove}:{transactions:Transaction[];currency:string;categories:string[];open:(t?:TransactionType,c?:string,d?:Transaction)=>void;remove:(id:string)=>void}) {const [query,setQuery]=useState('');const [type,setType]=useState<'all'|TransactionType>('all');const [month,setMonth]=useState('all');const [category,setCategory]=useState('all');const filtered=useMemo(()=>transactions.filter(t=>(type==='all'||t.type===type)&&(month==='all'||t.date.slice(0,7)===month)&&(category==='all'||t.category===category)&&(`${t.category} ${t.account||''} ${t.description} ${t.notes}`.toLowerCase().includes(query.toLowerCase()))).sort((a,b)=>b.date.localeCompare(a.date)),[transactions,query,type,month,category]);const groups=groupByDate(filtered);const months=[...new Set(transactions.map(t=>t.date.slice(0,7)))];return <div className="ledger-page"><div className="page-heading"><div><p className="eyebrow">Money movement</p><h1>Ledger</h1><p>Every inflow, expense and outstanding due.</p></div><button className="button primary desktop-add" onClick={()=>open()}><Plus size={17}/> Add transaction</button></div><div className="ledger-tools"><label className="search"><Search size={18}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search ledger by text, note or account"/></label><div className="filters"><ThemedSelect ariaLabel="Transaction type" value={type} onChange={v=>setType(v as typeof type)} options={[{value:'all',label:'All types'},{value:'income',label:'Income',icon:<ArrowDownLeft size={14}/>},{value:'expense',label:'Expenses',icon:<ArrowUpRight size={14}/>},{value:'due',label:'Dues',icon:<Landmark size={14}/>}]} compact/><ThemedSelect ariaLabel="Category filter" value={category} onChange={v=>setCategory(v)} options={[{value:'all',label:'All categories'},...cats.map(c=>{const I=categoryIcons[c]||ReceiptText;return {value:c,label:c,icon:<I size={14}/>}})]} compact searchable searchPlaceholder="Filter category..."/><ThemedSelect ariaLabel="Date filter" value={month} onChange={v=>setMonth(v)} options={[{value:'all',label:'All dates'},...months.map(m=>({value:m,label:new Date(`${m}-01T12:00:00`).toLocaleDateString(undefined,{month:'long',year:'numeric'})}))]} compact/></div></div>{filtered.length?<div className="ledger-list">{Object.entries(groups).map(([date,items])=><section key={date}><h3>{labelDate(date)}</h3><div className="transactions">{items.map(t=><TransactionRow key={t.id} tx={t} currency={currency} actions={<><IconButton label="Edit transaction" onClick={()=>open(t.type,t.category,t)}><Pencil size={16}/></IconButton><IconButton label="Delete transaction" onClick={()=>remove(t.id)}><Trash2 size={16}/></IconButton></>}/>)}</div></section>)}</div>:<div className="no-results"><Filter size={24}/><h2>No matching entries</h2><p>Try changing your filters or add a new transaction.</p></div>}</div>}
+function Ledger({
+  transactions,
+  currency,
+  categories: cats,
+  open,
+  remove,
+  onReconcile
+}: {
+  transactions: Transaction[]
+  currency: string
+  categories: string[]
+  open: (t?: TransactionType, c?: string, d?: Transaction) => void
+  remove: (id: string) => void
+  onReconcile: () => void
+}) {
+  const [query, setQuery] = useState('')
+  const [type, setType] = useState<'all' | TransactionType>('all')
+  const [category, setCategory] = useState('all')
+
+  // Date filter state: 'all' | 'today' | 'yesterday' | 'specific' | 'range' | 'YYYY-MM'
+  const [dateFilter, setDateFilter] = useState('all')
+  const [specificDate, setSpecificDate] = useState<string>(() => today())
+  const [rangeStart, setRangeStart] = useState<string>(() => {
+    const d = new Date()
+    d.setDate(1)
+    return d.toISOString().slice(0, 10)
+  })
+  const [rangeEnd, setRangeEnd] = useState<string>(() => today())
+
+  const todayStr = useMemo(() => today(), [])
+  const yesterdayStr = useMemo(() => {
+    const d = new Date()
+    d.setDate(d.getDate() - 1)
+    return d.toISOString().slice(0, 10)
+  }, [])
+
+  const months = useMemo(
+    () => [...new Set(transactions.map((t) => t.date.slice(0, 7)))].sort().reverse(),
+    [transactions]
+  )
+
+  const dateFilterOptions = useMemo(() => {
+    return [
+      { value: 'all', label: 'All dates' },
+      { value: 'today', label: 'Today' },
+      { value: 'yesterday', label: 'Yesterday' },
+      { value: 'specific', label: 'Specific date...' },
+      { value: 'range', label: 'Date range...' },
+      ...months.map((m) => ({
+        value: m,
+        label: new Date(`${m}-01T12:00:00`).toLocaleDateString(undefined, {
+          month: 'long',
+          year: 'numeric'
+        })
+      }))
+    ]
+  }, [months])
+
+  const filtered = useMemo(() => {
+    return transactions
+      .filter((t) => {
+        if (type !== 'all' && t.type !== type) return false
+        if (category !== 'all' && t.category !== category) return false
+
+        // Date filtering
+        if (dateFilter === 'today') {
+          if (t.date !== todayStr) return false
+        } else if (dateFilter === 'yesterday') {
+          if (t.date !== yesterdayStr) return false
+        } else if (dateFilter === 'specific') {
+          if (t.date !== specificDate) return false
+        } else if (dateFilter === 'range') {
+          if (t.date < rangeStart || t.date > rangeEnd) return false
+        } else if (dateFilter !== 'all') {
+          if (t.date.slice(0, 7) !== dateFilter) return false
+        }
+
+        if (query.trim()) {
+          const matchText = `${t.category} ${t.account || ''} ${t.description} ${t.notes}`.toLowerCase()
+          if (!matchText.includes(query.toLowerCase())) return false
+        }
+
+        return true
+      })
+      .sort((a, b) => b.date.localeCompare(a.date))
+  }, [transactions, query, type, category, dateFilter, specificDate, rangeStart, rangeEnd, todayStr, yesterdayStr])
+
+  const groups = groupByDate(filtered)
+
+  return (
+    <div className="ledger-page">
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">Money movement</p>
+          <h1>Ledger</h1>
+          <p>Every inflow, expense and outstanding due.</p>
+        </div>
+        <div className="heading-actions">
+          <button
+            type="button"
+            className="button secondary desktop-reconcile"
+            onClick={onReconcile}
+            title="Reconcile with bank statement"
+          >
+            <Scale size={16} /> Reconcile
+          </button>
+          <button
+            type="button"
+            className="button primary desktop-add"
+            onClick={() => open()}
+          >
+            <Plus size={17} /> Add transaction
+          </button>
+        </div>
+      </div>
+
+      <div className="ledger-tools">
+        <label className="search">
+          <Search size={18} />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search ledger by text, note or account"
+          />
+        </label>
+        <div className="filters">
+          <ThemedSelect
+            ariaLabel="Transaction type"
+            value={type}
+            onChange={(v) => setType(v as typeof type)}
+            options={[
+              { value: 'all', label: 'All types' },
+              { value: 'income', label: 'Income', icon: <ArrowDownLeft size={14} /> },
+              { value: 'expense', label: 'Expenses', icon: <ArrowUpRight size={14} /> },
+              { value: 'due', label: 'Dues', icon: <Landmark size={14} /> }
+            ]}
+            compact
+          />
+          <ThemedSelect
+            ariaLabel="Category filter"
+            value={category}
+            onChange={(v) => setCategory(v)}
+            options={[
+              { value: 'all', label: 'All categories' },
+              ...cats.map((c) => {
+                const I = categoryIcons[c] || ReceiptText
+                return { value: c, label: c, icon: <I size={14} /> }
+              })
+            ]}
+            compact
+            searchable
+            searchPlaceholder="Filter category..."
+          />
+          <ThemedSelect
+            ariaLabel="Date filter"
+            value={dateFilter}
+            onChange={(v) => setDateFilter(v)}
+            options={dateFilterOptions}
+            compact
+          />
+          {dateFilter === 'specific' && (
+            <div className="ledger-custom-date">
+              <ThemedDatePicker
+                value={specificDate}
+                onChange={setSpecificDate}
+                ariaLabel="Select specific date"
+              />
+            </div>
+          )}
+          {dateFilter === 'range' && (
+            <div className="ledger-date-range">
+              <ThemedDatePicker
+                value={rangeStart}
+                onChange={setRangeStart}
+                ariaLabel="From date"
+                placeholder="From"
+              />
+              <span className="date-range-sep">to</span>
+              <ThemedDatePicker
+                value={rangeEnd}
+                onChange={setRangeEnd}
+                ariaLabel="To date"
+                placeholder="To"
+              />
+            </div>
+          )}
+          <button
+            type="button"
+            className="button compact secondary mobile-reconcile-pill"
+            onClick={onReconcile}
+            title="Reconcile with bank statement"
+          >
+            <Scale size={14} /> Reconcile
+          </button>
+        </div>
+      </div>
+
+      {filtered.length ? (
+        <div className="ledger-list">
+          {Object.entries(groups).map(([date, items]) => (
+            <section key={date}>
+              <h3>{labelDate(date)}</h3>
+              <div className="transactions">
+                {items.map((t) => (
+                  <TransactionRow
+                    key={t.id}
+                    tx={t}
+                    currency={currency}
+                    actions={
+                      <>
+                        <IconButton label="Edit transaction" onClick={() => open(t.type, t.category, t)}>
+                          <Pencil size={16} />
+                        </IconButton>
+                        <IconButton label="Delete transaction" onClick={() => remove(t.id)}>
+                          <Trash2 size={16} />
+                        </IconButton>
+                      </>
+                    }
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      ) : (
+        <div className="no-results">
+          <Filter size={24} />
+          <h2>No matching entries</h2>
+          <p>Try changing your filters or add a new transaction.</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function TransactionRow({tx,currency,actions}:{tx:Transaction;currency:string;actions?:React.ReactNode}) {const I=tx.type==='income'?ArrowDownLeft:tx.type==='due'?Landmark:categoryIcons[tx.category]??ReceiptText;return <article className="transaction"><span className={`transaction-icon ${tx.type}`}><I size={18}/></span><div className="transaction-main"><strong>{tx.description||tx.category}</strong><span>{tx.category}{tx.account?` · ${tx.account}`:''}{tx.recurring?' · Recurring':''}{tx.notes?` · ${tx.notes}`:''}</span></div><div className={`transaction-value ${tx.type}`}><strong>{tx.type==='income'?'+':'−'} {formatMoney(tx.amount,currency)}</strong><span>{tx.type==='due'?'Due paid':tx.type}</span></div>{actions&&<div className="row-actions">{actions}</div>}</article>}
 
 function BudgetPage({
@@ -1390,6 +1735,14 @@ function ConfigPage({
             <ThemedSelect compact value={data.settings.currency} onChange={v=>setSettings({currency:v})} options={currencies.map(c=>({value:c.code,label:`${c.symbol} — ${c.name}`}))}/>
           </div>
         </SettingRow>
+        <button className="data-action" onClick={() => setModal({ mode: 'onboarding' })}>
+          <Sparkles size={18} />
+          <span>
+            <strong>Run setup walkthrough</strong>
+            <small>Review currency, accounts, and feature introduction</small>
+          </span>
+          <ChevronRight size={17} />
+        </button>
       </ConfigSection>
 
       <ConfigSection title="Finance Defaults">
@@ -1458,6 +1811,25 @@ function ConfigPage({
         <ToggleRow title="Budget alerts" detail="When you approach a limit" on={data.settings.notifications.budget} set={v=>setSettings({notifications:{...data.settings.notifications,budget:v}})}/>
         <ToggleRow title="Due reminders" detail="Keep outstanding payments visible" on={data.settings.notifications.dues} set={v=>setSettings({notifications:{...data.settings.notifications,dues:v}})}/>
         <ToggleRow title="Monthly summaries" detail="A fresh financial recap" on={data.settings.notifications.summary} set={v=>setSettings({notifications:{...data.settings.notifications,summary:v}})}/>
+      </ConfigSection>
+
+      <ConfigSection title="Reconciliation">
+        <button className="data-action" onClick={() => setModal({ mode: 'reconcile' })}>
+          <Scale size={18} />
+          <span>
+            <strong>Reconcile bank statements</strong>
+            <small>Match PDF, CSV or Excel statements against THOGAI</small>
+          </span>
+          <ChevronRight size={17} />
+        </button>
+        <button className="data-action" onClick={() => setModal({ mode: 'reconciliation_history' })}>
+          <History size={18} />
+          <span>
+            <strong>Reconciliation history</strong>
+            <small>Review past reconciled statement snapshots</small>
+          </span>
+          <ChevronRight size={17} />
+        </button>
       </ConfigSection>
 
       <ConfigSection title="Data">

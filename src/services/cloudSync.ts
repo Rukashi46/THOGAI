@@ -1,6 +1,6 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { idbStorage, type QueuedSync } from './idb'
-import { storage, type Budget, type FinanceData, type Settings, type Transaction } from './storage'
+import { storage, type Budget, type FinanceData, type ReconciliationRecord, type Settings, type Transaction } from './storage'
 import type { AuthUser } from './auth'
 
 export type SyncState = 'idle' | 'syncing' | 'synced' | 'offline' | 'error'
@@ -163,8 +163,11 @@ class CloudSyncService {
           defaultAccount: cloudSettings.default_account || mergedSettings.defaultAccount,
           theme: cloudSettings.theme || mergedSettings.theme,
           categories: Array.isArray(cloudSettings.categories) ? cloudSettings.categories : mergedSettings.categories,
+          incomeCategories: Array.isArray(cloudSettings.income_categories) ? cloudSettings.income_categories : mergedSettings.incomeCategories,
           accounts: Array.isArray(cloudSettings.accounts) ? cloudSettings.accounts : mergedSettings.accounts,
-          notifications: cloudSettings.notifications || mergedSettings.notifications
+          notifications: cloudSettings.notifications || mergedSettings.notifications,
+          onboardingCompleted: cloudSettings.onboarding_completed ?? mergedSettings.onboardingCompleted,
+          nickname: cloudSettings.nickname || mergedSettings.nickname,
         }
       }
 
@@ -306,8 +309,11 @@ class CloudSyncService {
         default_account: settings.defaultAccount,
         theme: settings.theme,
         categories: settings.categories,
+        income_categories: settings.incomeCategories,
         accounts: settings.accounts,
         notifications: settings.notifications,
+        onboarding_completed: settings.onboardingCompleted,
+        nickname: settings.nickname,
         updated_at: new Date().toISOString()
       }
       const { error } = await supabase.from('user_settings').upsert(row)
@@ -408,8 +414,11 @@ class CloudSyncService {
               default_account: s.defaultAccount,
               theme: s.theme,
               categories: s.categories,
+              income_categories: s.incomeCategories,
               accounts: s.accounts,
               notifications: s.notifications,
+              onboarding_completed: s.onboardingCompleted,
+              nickname: s.nickname,
               updated_at: new Date().toISOString()
             })
           }
@@ -496,6 +505,60 @@ class CloudSyncService {
       this.setSyncState('error')
       throw err
     }
+  }
+
+  /**
+   * Save a reconciliation record to cloud.
+   */
+  public async syncReconciliationRecord(
+    record: ReconciliationRecord,
+    user: AuthUser | null
+  ): Promise<void> {
+    if (!user || !isSupabaseConfigured() || !navigator.onLine) return
+    try {
+      await supabase.from('reconciliation_history').upsert({
+        id: record.id,
+        user_id: user.id,
+        account: record.account,
+        start_date: record.startDate,
+        end_date: record.endDate,
+        reconciliation_date: record.reconciliationDate,
+        statement_closing_balance: record.statementClosingBalance,
+        thogai_reconciled_balance: record.thogaiReconciledBalance,
+        difference: record.difference,
+        transactions_checked: record.transactionsChecked,
+        transactions_matched: record.transactionsMatched,
+      })
+    } catch {}
+  }
+
+  /**
+   * Fetch reconciliation history from cloud.
+   */
+  public async fetchReconciliationHistory(
+    user: AuthUser | null
+  ): Promise<ReconciliationRecord[]> {
+    if (!user || !isSupabaseConfigured() || !navigator.onLine) return []
+    try {
+      const { data, error } = await supabase
+        .from('reconciliation_history')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('reconciliation_date', { ascending: false })
+      if (error || !data) return []
+      return data.map((r: any) => ({
+        id: r.id,
+        account: r.account,
+        startDate: r.start_date,
+        endDate: r.end_date,
+        reconciliationDate: r.reconciliation_date,
+        statementClosingBalance: Number(r.statement_closing_balance),
+        thogaiReconciledBalance: Number(r.thogai_reconciled_balance),
+        difference: Number(r.difference),
+        transactionsChecked: r.transactions_checked,
+        transactionsMatched: r.transactions_matched,
+      }))
+    } catch { return [] }
   }
 }
 
