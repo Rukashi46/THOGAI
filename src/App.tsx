@@ -25,6 +25,7 @@ import { buildFinancialContext, generateLocalAiResponse, queryAiAdvisor, type Fi
 import { SafeMarkdown } from './lib/markdown'
 import { ThemedSelect } from './components/ThemedSelect'
 import { ThemedDatePicker } from './components/ThemedDatePicker'
+import { ThemedDateFilter } from './components/ThemedDateFilter'
 import { authService, type AuthUser } from './services/auth'
 import { cloudSync, type SyncState } from './services/cloudSync'
 import { idbStorage } from './services/idb'
@@ -247,8 +248,8 @@ const today = () => new Date().toISOString().slice(0,10)
 const safe = (n:number) => Number.isFinite(n) ? n : 0
 
 function Brand({small=false}:{small?:boolean}) { return <div className="brand"><div className="brand-mark" aria-hidden="true"><i></i><i></i><i></i><b><Leaf size={11}/></b></div>{!small&&<div><strong>THOGAI</strong><span>Know your money.</span></div>}</div> }
-function IconButton({children,label,onClick,active=false,className=''}:{children:React.ReactNode;label:string;onClick?:()=>void;active?:boolean;className?:string}) {return <motion.button whileTap={buttonTap} className={`icon-button ${active?'is-active':''} ${className}`} aria-label={label} title={label} onClick={onClick}>{children}</motion.button>}
-function Progress({value,state='normal'}:{value:number;state?:string}) {return <div className="progress" aria-label={`${Math.round(value)}% used`}><motion.span className={`progress-fill ${state}`} initial={{width:0}} animate={{width:`${Math.min(100,Math.max(0,value))}%`}} transition={{duration:.55}}/></div>}
+function IconButton({children,label,onClick,active=false,className=''}:{children:React.ReactNode;label:string;onClick?:(e: React.MouseEvent<HTMLButtonElement>)=>void;active?:boolean;className?:string}) {return <motion.button whileTap={buttonTap} className={`icon-button ${active?'is-active':''} ${className}`} aria-label={label} title={label} onClick={onClick}>{children}</motion.button>}
+function Progress({value,state='normal'}:{value:number;state?:string}) {return <div className="progress" aria-label={`${Math.round(value)}% used`}><motion.span className={`progress-fill ${state}`} initial={{width:0}} animate={{width:`${Math.min(100,Math.max(0,value))}%`}} transition={{ type: 'spring', stiffness: 180, damping: 28, mass: 1.0 }} style={{willChange:'width'}}/></div>}
 function Empty({onAction}:{onAction:(type:TransactionType| 'budget')=>void}) {return <section className="empty"><div className="empty-orbit"><TrendingUp size={30}/></div><h2>Your money story starts here.</h2><p>Set a foundation, then THOGAI will make every month easier to understand.</p><div className="empty-actions"><button className="button primary" onClick={()=>onAction('income')}><ArrowDownLeft size={17}/> Add income</button><button className="button ghost" onClick={()=>onAction('expense')}><Plus size={17}/> Add expense</button></div><button className="text-button" onClick={()=>onAction('budget')}>Set a monthly budget <ChevronRight size={15}/></button></section>}
 
 function SyncPill({ state, onClick, lastSynced }: { state: SyncState; onClick: () => void; lastSynced?: Date | null }) {
@@ -779,8 +780,8 @@ function App() {
       </nav>
 
       <motion.button
-        whileTap={{ scale: 0.88, transition: { type: 'spring', stiffness: 560, damping: 28 } }}
-        whileHover={{ scale: 1.07, transition: { type: 'spring', stiffness: 400, damping: 28 } }}
+        whileTap={primaryButtonTap}
+        whileHover={{ scale: 1.06, transition: { type: 'spring', stiffness: 380, damping: 30 } }}
         className="floating-add"
         onClick={() => open()}
         aria-label="Add transaction"
@@ -934,9 +935,9 @@ function App() {
         {toast && (
           <motion.div
             className="toast"
-            initial={{ opacity: 0, y: 18, scale: 0.92 }}
-            animate={{ opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 480, damping: 32, mass: 0.7 } }}
-            exit={{ opacity: 0, y: 14, scale: 0.94, transition: { duration: 0.18, ease: [0.4, 0, 0.6, 1] } }}
+            initial={{ opacity: 0, y: 16, scale: 0.94 }}
+            animate={{ opacity: 1, y: 0, scale: 1, transition: { ...snapSpring, opacity: { duration: 0.12 } } }}
+            exit={{ opacity: 0, y: 10, scale: 0.96, transition: { duration: 0.16, ease: [0.4, 0, 0.6, 1] } }}
           >
             <Check size={16} />
             {toast}
@@ -1047,7 +1048,7 @@ function Ledger({
           <h1>Ledger</h1>
           <p>Every inflow, expense and outstanding due.</p>
         </div>
-        <div className="heading-actions">
+        <div className="heading-actions desktop-heading-actions">
           <button
             type="button"
             className="button secondary desktop-reconcile"
@@ -1066,6 +1067,18 @@ function Ledger({
         </div>
       </div>
 
+      {/* Mobile-only secondary Reconcile action row right under header description */}
+      <div className="mobile-ledger-reconcile">
+        <button
+          type="button"
+          className="button secondary mobile-reconcile-btn"
+          onClick={onReconcile}
+          title="Reconcile with bank statement"
+        >
+          <Scale size={15} /> Reconcile
+        </button>
+      </div>
+
       <div className="ledger-tools">
         <label className="search">
           <Search size={18} />
@@ -1076,74 +1089,50 @@ function Ledger({
           />
         </label>
         <div className="filters">
-          <ThemedSelect
-            ariaLabel="Transaction type"
-            value={type}
-            onChange={(v) => setType(v as typeof type)}
-            options={[
-              { value: 'all', label: 'All types' },
-              { value: 'income', label: 'Income', icon: <ArrowDownLeft size={14} /> },
-              { value: 'expense', label: 'Expenses', icon: <ArrowUpRight size={14} /> },
-              { value: 'due', label: 'Dues', icon: <Landmark size={14} /> }
-            ]}
-            compact
-          />
-          <ThemedSelect
-            ariaLabel="Category filter"
-            value={category}
-            onChange={(v) => setCategory(v)}
-            options={[
-              { value: 'all', label: 'All categories' },
-              ...cats.map((c) => {
-                const I = categoryIcons[c] || ReceiptText
-                return { value: c, label: c, icon: <I size={14} /> }
-              })
-            ]}
-            compact
-            searchable
-            searchPlaceholder="Filter category..."
-          />
-          <ThemedSelect
-            ariaLabel="Date filter"
-            value={dateFilter}
-            onChange={(v) => setDateFilter(v)}
-            options={dateFilterOptions}
-            compact
-          />
-          {dateFilter === 'specific' && (
-            <div className="ledger-custom-date">
-              <ThemedDatePicker
-                value={specificDate}
-                onChange={setSpecificDate}
-                ariaLabel="Select specific date"
-              />
-            </div>
-          )}
-          {dateFilter === 'range' && (
-            <div className="ledger-date-range">
-              <ThemedDatePicker
-                value={rangeStart}
-                onChange={setRangeStart}
-                ariaLabel="From date"
-                placeholder="From"
-              />
-              <span className="date-range-sep">to</span>
-              <ThemedDatePicker
-                value={rangeEnd}
-                onChange={setRangeEnd}
-                ariaLabel="To date"
-                placeholder="To"
-              />
-            </div>
-          )}
-          <button
-            type="button"
-            className="button compact secondary mobile-reconcile-pill"
-            onClick={onReconcile}
-            title="Reconcile with bank statement"
-          >
-            <Scale size={14} /> Reconcile
-          </button>
+          <div className="filters-row-primary">
+            <ThemedSelect
+              ariaLabel="Transaction type"
+              value={type}
+              onChange={(v) => setType(v as typeof type)}
+              options={[
+                { value: 'all', label: 'All types' },
+                { value: 'income', label: 'Income', icon: <ArrowDownLeft size={14} /> },
+                { value: 'expense', label: 'Expenses', icon: <ArrowUpRight size={14} /> },
+                { value: 'due', label: 'Dues', icon: <Landmark size={14} /> }
+              ]}
+              compact
+            />
+            <ThemedSelect
+              ariaLabel="Category filter"
+              value={category}
+              onChange={(v) => setCategory(v)}
+              options={[
+                { value: 'all', label: 'All categories' },
+                ...cats.map((c) => {
+                  const I = categoryIcons[c] || ReceiptText
+                  return { value: c, label: c, icon: <I size={14} /> }
+                })
+              ]}
+              compact
+              searchable
+              searchPlaceholder="Filter category..."
+            />
+          </div>
+          <div className="filters-row-date">
+            <ThemedDateFilter
+              dateFilter={dateFilter}
+              onDateFilterChange={setDateFilter}
+              specificDate={specificDate}
+              onSpecificDateChange={setSpecificDate}
+              rangeStart={rangeStart}
+              rangeEnd={rangeEnd}
+              onRangeChange={(start, end) => {
+                setRangeStart(start)
+                setRangeEnd(end)
+              }}
+              months={months}
+            />
+          </div>
         </div>
       </div>
 
@@ -1158,12 +1147,25 @@ function Ledger({
                     key={t.id}
                     tx={t}
                     currency={currency}
+                    onClick={() => open(t.type, t.category, t)}
                     actions={
                       <>
-                        <IconButton label="Edit transaction" onClick={() => open(t.type, t.category, t)}>
+                        <IconButton
+                          label="Edit transaction"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            open(t.type, t.category, t)
+                          }}
+                        >
                           <Pencil size={16} />
                         </IconButton>
-                        <IconButton label="Delete transaction" onClick={() => remove(t.id)}>
+                        <IconButton
+                          label="Delete transaction"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            remove(t.id)
+                          }}
+                        >
                           <Trash2 size={16} />
                         </IconButton>
                       </>
@@ -1185,7 +1187,53 @@ function Ledger({
   )
 }
 
-function TransactionRow({tx,currency,actions}:{tx:Transaction;currency:string;actions?:React.ReactNode}) {const I=tx.type==='income'?ArrowDownLeft:tx.type==='due'?Landmark:categoryIcons[tx.category]??ReceiptText;return <article className="transaction"><span className={`transaction-icon ${tx.type}`}><I size={18}/></span><div className="transaction-main"><strong>{tx.description||tx.category}</strong><span>{tx.category}{tx.account?` · ${tx.account}`:''}{tx.recurring?' · Recurring':''}{tx.notes?` · ${tx.notes}`:''}</span></div><div className={`transaction-value ${tx.type}`}><strong>{tx.type==='income'?'+':'−'} {formatMoney(tx.amount,currency)}</strong><span>{tx.type==='due'?'Due paid':tx.type}</span></div>{actions&&<div className="row-actions">{actions}</div>}</article>}
+function TransactionRow({
+  tx,
+  currency,
+  actions,
+  onClick
+}: {
+  tx: Transaction
+  currency: string
+  actions?: React.ReactNode
+  onClick?: () => void
+}) {
+  const I = tx.type === 'income' ? ArrowDownLeft : tx.type === 'due' ? Landmark : categoryIcons[tx.category] ?? ReceiptText
+  return (
+    <article
+      className="transaction"
+      onClick={onClick}
+      style={{ cursor: onClick ? 'pointer' : undefined }}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+    >
+      <span className={`transaction-icon ${tx.type}`}>
+        <I size={18} />
+      </span>
+      <div className="transaction-main">
+        <strong>{tx.description || tx.category}</strong>
+        <span>
+          {tx.category}
+          {tx.account ? ` · ${tx.account}` : ''}
+          {tx.recurring ? ' · Recurring' : ''}
+          {tx.notes ? ` · ${tx.notes}` : ''}
+        </span>
+      </div>
+      <div className={`transaction-value ${tx.type}`}>
+        <strong>
+          {tx.type === 'income' ? '+' : '−'} {formatMoney(tx.amount, currency)}
+        </strong>
+        <span>{tx.type === 'due' ? 'Due paid' : tx.type}</span>
+      </div>
+      {actions && (
+        <div className="row-actions" onClick={(e) => e.stopPropagation()}>
+          {actions}
+        </div>
+      )}
+    </article>
+  )
+}
+
 
 function BudgetPage({
   data,

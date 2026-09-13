@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { createPortal } from 'react-dom'
 import { Check, ChevronDown, Search } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { dropdownVariants } from '../lib/motion'
 
 export interface SelectOption {
   value: string
@@ -319,9 +320,10 @@ export function ThemedSelect({
                   maxHeight: coords.maxHeight,
                   zIndex: 9999
                 }}
-                initial={{ opacity: 0, y: coords.isUpward ? 8 : -8, scale: 0.96 }}
-                animate={{ opacity: 1, y: 0, scale: 1, transition: { duration: 0.2, ease: [0.34, 1.04, 0.64, 1] } }}
-                exit={{ opacity: 0, y: coords.isUpward ? 6 : -6, scale: 0.97, transition: { duration: 0.14, ease: [0.4, 0, 0.6, 1] } }}
+                variants={dropdownVariants(coords.isUpward)}
+                initial="initial"
+                animate="animate"
+                exit="exit"
                 onKeyDown={handleKeyDown}
               >
                 {searchable && (

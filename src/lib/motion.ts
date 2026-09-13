@@ -193,21 +193,25 @@ export const backdropVariants: Variants = {
 
 // ─── Dropdown / Overlay Menus ─────────────────────────────────────────────────
 
-/** ThemedSelect, DatePicker, context menus */
-export const dropdownVariants: Variants = {
-  initial: { opacity: 0, scale: 0.97, y: -6 },
-  animate: {
-    opacity: 1,
-    scale: 1,
-    y: 0,
-    transition: snappyEase,
-  },
-  exit: {
-    opacity: 0,
-    scale: 0.97,
-    y: -4,
-    transition: { duration: 0.14, ease: [0.4, 0, 0.6, 1] },
-  },
+/** ThemedSelect, DatePicker, context menus — direction-aware */
+export function dropdownVariants(isUpward: boolean = false): Variants {
+  const enterY = isUpward ? 6 : -6
+  const exitY  = isUpward ? 4 : -4
+  return {
+    initial: { opacity: 0, scale: 0.97, y: enterY },
+    animate: {
+      opacity: 1,
+      scale: 1,
+      y: 0,
+      transition: snappyEase,
+    },
+    exit: {
+      opacity: 0,
+      scale: 0.97,
+      y: exitY,
+      transition: { duration: 0.14, ease: [0.4, 0, 0.6, 1] },
+    },
+  }
 }
 
 // ─── Auth Screen Step Switcher ────────────────────────────────────────────────

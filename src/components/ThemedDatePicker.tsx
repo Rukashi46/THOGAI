@@ -2,6 +2,22 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { createPortal } from 'react-dom'
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { dropdownVariants } from '../lib/motion'
+
+/** Slides calendar grid left/right on month change */
+const calMonthVariants = {
+  enter: (dir: number) => ({ x: dir > 0 ? 22 : -22, opacity: 0 }),
+  center: {
+    x: 0,
+    opacity: 1,
+    transition: { type: 'spring' as const, stiffness: 420, damping: 36, mass: 0.7 },
+  },
+  exit: (dir: number) => ({
+    x: dir > 0 ? -16 : 16,
+    opacity: 0,
+    transition: { duration: 0.14, ease: [0.4, 0, 0.6, 1] as [number, number, number, number] },
+  }),
+}
 
 export interface ThemedDatePickerProps {
   value: string // 'YYYY-MM-DD'
@@ -46,6 +62,7 @@ export function ThemedDatePicker({
   const [viewDate, setViewDate] = useState<Date>(
     () => new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1)
   )
+  const [monthDir, setMonthDir] = useState(1)
 
   const updatePosition = useCallback(() => {
     if (!triggerRef.current) return
@@ -129,10 +146,12 @@ export function ThemedDatePicker({
   }
 
   const prevMonth = () => {
+    setMonthDir(-1)
     setViewDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
   }
 
   const nextMonth = () => {
+    setMonthDir(1)
     setViewDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
   }
 
@@ -219,9 +238,10 @@ export function ThemedDatePicker({
                   width: Math.min(268, window.innerWidth - 24),
                   zIndex: 9999
                 }}
-                initial={{ opacity: 0, y: coords.isUpward ? 8 : -8, scale: 0.96 }}
-                animate={{ opacity: 1, y: 0, scale: 1, transition: { duration: 0.2, ease: [0.34, 1.04, 0.64, 1] } }}
-                exit={{ opacity: 0, y: coords.isUpward ? 6 : -6, scale: 0.97, transition: { duration: 0.14, ease: [0.4, 0, 0.6, 1] } }}
+                variants={dropdownVariants(coords.isUpward)}
+                initial="initial"
+                animate="animate"
+                exit="exit"
               >
             <div className="themed-calendar-header">
               <button
@@ -253,6 +273,17 @@ export function ThemedDatePicker({
               ))}
             </div>
 
+            <div style={{ overflow: 'hidden', position: 'relative' }}>
+              <AnimatePresence initial={false} mode="popLayout" custom={monthDir}>
+                <motion.div
+                  key={`${year}-${month}`}
+                  custom={monthDir}
+                  variants={calMonthVariants}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  style={{ willChange: 'transform, opacity' }}
+                >
             <div className="themed-calendar-grid">
               {days.map((item, idx) => {
                 const isSelected = item.dateStr === selectedStr
@@ -273,6 +304,9 @@ export function ThemedDatePicker({
                   </button>
                 )
               })}
+            </div>
+                </motion.div>
+              </AnimatePresence>
             </div>
 
             <div className="themed-calendar-footer">
