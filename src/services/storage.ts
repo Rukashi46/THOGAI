@@ -1,6 +1,13 @@
 export type TransactionType = 'income' | 'expense' | 'due'
 export type Period = 'monthly'
 export type ThemeId = 'midnight' | 'cream' | 'amoled'
+export interface SplitShare {
+  id: string
+  person: string
+  amount: number
+  convertedToMyExpense?: number
+}
+
 export interface Transaction {
   id: string
   type: TransactionType
@@ -13,6 +20,14 @@ export interface Transaction {
   recurring: boolean
   createdAt: string
   updatedAt: string
+  paidFor?: 'myself' | 'others'
+  myShare?: number
+  splits?: SplitShare[]
+  repaymentFor?: {
+    person: string
+    splitId?: string
+    originatingTxId?: string
+  }
 }
 export interface Budget { id: string; category: string; limit: number; period: Period; createdAt: string; updatedAt: string }
 

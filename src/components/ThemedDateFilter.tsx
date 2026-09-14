@@ -333,24 +333,24 @@ export function ThemedDateFilter({
                 exit="exit"
               >
                 {/* Popover Subtabs */}
-                <div className="date-popover-tabs">
+                <div className="date-filter-tabs date-popover-tabs">
                   <button
                     type="button"
-                    className={`date-tab-btn ${activeTab === 'presets' ? 'active' : ''}`}
+                    className={`date-filter-tab date-tab-btn ${activeTab === 'presets' ? 'active' : ''}`}
                     onClick={() => setActiveTab('presets')}
                   >
                     Presets
                   </button>
                   <button
                     type="button"
-                    className={`date-tab-btn ${activeTab === 'single' ? 'active' : ''}`}
+                    className={`date-filter-tab date-tab-btn ${activeTab === 'single' ? 'active' : ''}`}
                     onClick={() => setActiveTab('single')}
                   >
                     Single Date
                   </button>
                   <button
                     type="button"
-                    className={`date-tab-btn ${activeTab === 'range' ? 'active' : ''}`}
+                    className={`date-filter-tab date-tab-btn ${activeTab === 'range' ? 'active' : ''}`}
                     onClick={() => setActiveTab('range')}
                   >
                     Date Range

@@ -42,21 +42,35 @@ import { parseStatement } from './services/statementParser'
 import { ReconciliationModal } from './components/ReconciliationModal'
 import { ReconciliationHistoryModal } from './components/ReconciliationHistoryModal'
 import { OnboardingModal } from './components/OnboardingModal'
+import { MoneyOwedModal } from './components/MoneyOwedModal'
+import { getOutstandingReceivables, normalizePersonName, getCashFlowAmount, getPersonalExpenseAmount, getEarnedIncomeAmount } from './lib/finance'
 
 type Page = 'home'|'ledger'|'budget'|'stats'|'config'
 type ModalState =
-  | { mode:'transaction'; draft?:Transaction; type?:TransactionType; category?:string }
-  | { mode:'budget'; draft?:Budget }
-  | { mode:'ai' }
-  | { mode:'pin_setup'; nextAction?: 'appLock' | 'biometricLock' | 'changePin' }
-  | { mode:'categories' }
-  | { mode:'accounts' }
-  | { mode:'migration' }
-  | { mode:'privacy' }
-  | { mode:'terms' }
-  | { mode:'reconcile' }
-  | { mode:'reconciliation_history' }
-  | { mode:'onboarding' }
+  | {
+      mode: 'transaction'
+      draft?: Transaction
+      type?: TransactionType
+      category?: string
+      repaymentFor?: {
+        person: string
+        amount?: number
+        splitId?: string
+        originatingTxId?: string
+      }
+    }
+  | { mode: 'money_owed' }
+  | { mode: 'budget'; draft?: Budget }
+  | { mode: 'ai' }
+  | { mode: 'pin_setup'; nextAction?: 'appLock' | 'biometricLock' | 'changePin' }
+  | { mode: 'categories' }
+  | { mode: 'accounts' }
+  | { mode: 'migration' }
+  | { mode: 'privacy' }
+  | { mode: 'terms' }
+  | { mode: 'reconcile' }
+  | { mode: 'reconciliation_history' }
+  | { mode: 'onboarding' }
   | null
 
 interface ConfirmDialogState {
@@ -252,16 +266,32 @@ function IconButton({children,label,onClick,active=false,className=''}:{children
 function Progress({value,state='normal'}:{value:number;state?:string}) {return <div className="progress" aria-label={`${Math.round(value)}% used`}><motion.span className={`progress-fill ${state}`} initial={{width:0}} animate={{width:`${Math.min(100,Math.max(0,value))}%`}} transition={{ type: 'spring', stiffness: 180, damping: 28, mass: 1.0 }} style={{willChange:'width'}}/></div>}
 function Empty({onAction}:{onAction:(type:TransactionType| 'budget')=>void}) {return <section className="empty"><div className="empty-orbit"><TrendingUp size={30}/></div><h2>Your money story starts here.</h2><p>Set a foundation, then THOGAI will make every month easier to understand.</p><div className="empty-actions"><button className="button primary" onClick={()=>onAction('income')}><ArrowDownLeft size={17}/> Add income</button><button className="button ghost" onClick={()=>onAction('expense')}><Plus size={17}/> Add expense</button></div><button className="text-button" onClick={()=>onAction('budget')}>Set a monthly budget <ChevronRight size={15}/></button></section>}
 
+function formatRelativeTime(date: Date | null | undefined): string {
+  if (!date) return ''
+  const diffMs = Date.now() - date.getTime()
+  const diffSec = Math.floor(diffMs / 1000)
+  if (diffSec < 45) return 'just now'
+  const diffMin = Math.floor(diffSec / 60)
+  if (diffMin === 1) return '1 minute ago'
+  if (diffMin < 60) return `${diffMin} minutes ago`
+  const diffHr = Math.floor(diffMin / 60)
+  if (diffHr === 1) return '1 hour ago'
+  if (diffHr < 24) return `${diffHr} hours ago`
+  return `${Math.floor(diffHr / 24)} days ago`
+}
+
 function SyncPill({ state, onClick, lastSynced }: { state: SyncState; onClick: () => void; lastSynced?: Date | null }) {
-  const label = state === 'syncing' ? 'Syncing...' : state === 'synced' ? 'Synced' : state === 'offline' ? 'Offline' : state === 'error' ? 'Sync issue' : 'Synced'
-  const icon = state === 'syncing' ? <RefreshCw size={12} /> : state === 'offline' ? <CloudOff size={12} /> : state === 'error' ? <CloudOff size={12} /> : <Check size={12} />
-  const timeStr = lastSynced ? ` · Last synced: ${lastSynced.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''
+  const label = state === 'syncing' ? 'Syncing…' : state === 'synced' ? '✓ Synced' : state === 'offline' ? 'Offline' : state === 'error' ? 'Sync issue' : '✓ Synced'
+  const icon = state === 'syncing' ? <RefreshCw size={12} className="spin" /> : state === 'offline' ? <CloudOff size={12} /> : state === 'error' ? <CloudOff size={12} /> : <Check size={12} />
+  const rel = formatRelativeTime(lastSynced)
+  const timeStr = rel ? ` · Last synced ${rel}` : ''
   return (
     <button
       type="button"
       className={`sync-pill ${state}`}
       onClick={onClick}
-      title={`Sync status: ${label}${timeStr}. Tap to refresh.`}
+      disabled={state === 'syncing'}
+      title={`Sync status: ${label}${timeStr}. Tap to sync.`}
       aria-label={`Sync status: ${label}`}
     >
       {icon}
@@ -463,6 +493,27 @@ function App() {
     setToast(id ? 'Transaction updated' : 'Transaction added')
   }
 
+  const markAsMyExpense = (txId: string, splitId: string, amountToConvert: number) => {
+    const tx = data.transactions.find((t) => t.id === txId)
+    if (!tx || !tx.splits) return
+    const updatedSplits = tx.splits.map((s) => {
+      if (s.id === splitId) {
+        return {
+          ...s,
+          convertedToMyExpense: (s.convertedToMyExpense || 0) + amountToConvert
+        }
+      }
+      return s
+    })
+    const updatedTx: Transaction = {
+      ...tx,
+      splits: updatedSplits,
+      updatedAt: new Date().toISOString()
+    }
+    saveTransaction(updatedTx, tx.id)
+    setToast(`Marked ${formatMoney(amountToConvert, data.settings.currency)} as personal expense`)
+  }
+
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null)
   const askConfirm = (opts: Omit<ConfirmDialogState, 'onCancel'> & { onCancel?: () => void }) => {
     setConfirmDialog({
@@ -610,7 +661,7 @@ function App() {
     )
   }
 
-  const s = snapshot(data.transactions, data.settings)
+  const s = snapshot(data.transactions, data.settings, undefined, data.budgets)
 
   const syncLabel = !currentUser
     ? 'Stored securely on this device'
@@ -728,6 +779,7 @@ function App() {
                 open={open}
                 remove={deleteTransaction}
                 onReconcile={() => setModal({ mode: 'reconcile' })}
+                onOpenMoneyOwed={() => setModal({ mode: 'money_owed' })}
               />
             )}
             {page === 'budget' && (
@@ -739,7 +791,7 @@ function App() {
                 askConfirm={askConfirm}
               />
             )}
-            {page === 'stats' && <StatsPage data={data} />}
+            {page === 'stats' && <StatsPage data={data} setPage={setPage} />}
             {page === 'config' && (
               <ConfigPage
                 data={data}
@@ -800,8 +852,26 @@ function App() {
             incomeCategories={data.settings.incomeCategories || defaultIncomeCategories}
             accounts={data.settings.accounts || defaultAccounts}
             defaultAccount={data.settings.defaultAccount || 'Cash'}
+            allTransactions={data.transactions}
+            repaymentFor={modal.repaymentFor}
             close={() => setModal(null)}
             submit={saveTransaction}
+          />
+        )}
+        {modal?.mode === 'money_owed' && (
+          <MoneyOwedModal
+            transactions={data.transactions}
+            currency={data.settings.currency}
+            close={() => setModal(null)}
+            onRecordRepayment={(details) => {
+              setModal({
+                mode: 'transaction',
+                type: 'income',
+                category: 'Friend Repayment',
+                repaymentFor: details
+              })
+            }}
+            onMarkAsMyExpense={markAsMyExpense}
           />
         )}
         {modal?.mode === 'budget' && (
@@ -948,7 +1018,7 @@ function App() {
   )
 }
 
-function HomePage({data,snapshot:s,setPage,open,openAi,setSettings}:{data:FinanceData;snapshot:ReturnType<typeof snapshot>;setPage:(p:Page,dir?:number)=>void;open:(t?:TransactionType,c?:string)=>void;openAi:()=>void;setSettings:(p:Partial<Settings>)=>void}) { const h=new Date().getHours(); const greeting=h<12?'Good morning':h<18?'Good afternoon':'Good evening'; const f=(n:number)=>formatMoney(n,data.settings.currency); const has=data.transactions.length>0||data.settings.monthlyBudget>0; const recent=[...data.transactions].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,4); const state=budgetState(s.expenses,s.budget); const insight=s.budget? s.expenses>s.budget?'Your spending is over your monthly budget.':s.budgetRemaining>0?`You have ${f(s.budgetRemaining)} left in this month’s budget.`:'You have reached this month’s budget.':s.expenses?'Every expense is now part of your financial picture.':'Add your first transaction to see an honest overview.'; return <>{!has?<Empty onAction={(x)=>x==='budget'?setPage('budget',1):open(x)}/>:<div className="home-layout"><section className="hero-area"><div className="greeting"><p>{greeting}{data.settings.name?`, ${data.settings.name}`:''}</p><h1>Let’s make today count.</h1></div><div className="insight insight-clickable" onClick={openAi} role="button" tabIndex={0} title="Tap to ask THOGAI AI"><div className="insight-icon"><TrendingUp size={18}/></div><p>{insight}</p><span className="ai-badge"><Sparkles size={11}/> Ask AI</span></div><motion.section className="balance-card" initial={{opacity:0,scale:.98}} animate={{opacity:1,scale:1}}><div className="balance-top"><span>Remaining balance</span><IconButton label={data.settings.hideBalance?'Show balance':'Hide balance'} onClick={()=>setSettings({hideBalance:!data.settings.hideBalance})}>{data.settings.hideBalance?<EyeOff size={18}/>:<Eye size={18}/>}</IconButton></div><h2>{data.settings.hideBalance?'••••••':f(s.balance)}</h2><div className="balance-foot"><span><span className="dot"></span>Available this month</span><span>{s.income?`${Math.round((s.balance/s.income)*100)}% retained`:''}</span></div></motion.section></section><section className="summary-grid"><Metric label="Income" value={f(s.income)} detail="Money in" icon={<ArrowDownLeft size={18}/>} tone="positive"/><Metric label="Expenses" value={f(s.expenses)} detail="Money spent" icon={<ArrowUpRight size={18}/>} tone="negative"/><Metric label="Previous dues" value={f(s.dues)} detail="Separate from expenses" icon={<Landmark size={18}/>} tone="neutral"/><Metric label="Paid out" value={f(s.paidOut)} detail="Expenses + dues" icon={<CircleDollarSign size={18}/>} tone="neutral"/></section><section className="section-block budget-overview"><div className="section-title"><div><p className="eyebrow">Monthly plan</p><h2>Budget overview</h2></div><button className="text-button" onClick={()=>setPage('budget',1)}>Manage <ChevronRight size={15}/></button></div>{s.budget?<><div className="budget-main"><div><strong>{f(s.expenses)} <span>of {f(s.budget)}</span></strong><p>{f(s.budgetRemaining)} remaining</p></div><b className={`percentage ${state}`}>{Math.round(s.budgetUsed)}% used</b></div><Progress value={s.budgetUsed} state={state}/></>:<div className="inline-empty"><p>Give every rupee a job with a monthly budget.</p><button className="button compact" onClick={()=>setPage('budget',1)}>Set budget</button></div>}</section><section className="section-block"><div className="section-title"><div><p className="eyebrow">Spend smarter</p><h2>Quick expense</h2></div><span className="muted">One tap to start</span></div><div className="quick-grid">{['Food & Dining','Groceries','Transport','Fuel','Snacks'].map(c=>{const I=categoryIcons[c]??ReceiptText;return <button key={c} onClick={()=>open('expense',c)}><span><I size={20}/></span>{c}</button>})}</div></section><section className="section-block recent"><div className="section-title"><div><p className="eyebrow">Your activity</p><h2>Recent transactions</h2></div><button className="text-button" onClick={()=>setPage('ledger',1)}>See all <ChevronRight size={15}/></button></div>{recent.length?<div className="transactions mini">{recent.map(t=><TransactionRow key={t.id} tx={t} currency={data.settings.currency}/>)}</div>:<p className="muted pad">No transactions yet.</p>}</section></div>}</> }
+function HomePage({data,snapshot:s,setPage,open,openAi,setSettings}:{data:FinanceData;snapshot:ReturnType<typeof snapshot>;setPage:(p:Page,dir?:number)=>void;open:(t?:TransactionType,c?:string)=>void;openAi:()=>void;setSettings:(p:Partial<Settings>)=>void}) { const h=new Date().getHours(); const greeting=h<12?'Good morning':h<18?'Good afternoon':'Good evening'; const f=(n:number)=>formatMoney(n,data.settings.currency); const has=data.transactions.length>0||data.settings.monthlyBudget>0||data.budgets.length>0; const recent=[...data.transactions].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,4); const state=budgetState(s.expenses,s.budget); const insight=s.budget? s.expenses>s.budget?'Your spending is over your monthly budget.':s.budgetRemaining>0?`You have ${f(s.budgetRemaining)} left in this month’s budget.`:'You have reached this month’s budget.':s.expenses?'Every expense is now part of your financial picture.':'Add your first transaction to see an honest overview.'; return <>{!has?<Empty onAction={(x)=>x==='budget'?setPage('budget',1):open(x)}/>:<div className="home-layout"><section className="hero-area"><div className="greeting"><p>{greeting}{data.settings.name?`, ${data.settings.name}`:''}</p><h1>Let’s make today count.</h1></div><div className="insight insight-clickable" onClick={openAi} role="button" tabIndex={0} title="Tap to ask THOGAI AI"><div className="insight-icon"><TrendingUp size={18}/></div><p>{insight}</p><span className="ai-badge"><Sparkles size={11}/> Ask AI</span></div><motion.section className="balance-card" initial={{opacity:0,scale:.98}} animate={{opacity:1,scale:1}}><div className="balance-top"><span>Remaining balance</span><IconButton label={data.settings.hideBalance?'Show balance':'Hide balance'} onClick={()=>setSettings({hideBalance:!data.settings.hideBalance})}>{data.settings.hideBalance?<EyeOff size={18}/>:<Eye size={18}/>}</IconButton></div><h2>{data.settings.hideBalance?'••••••':f(s.balance)}</h2><div className="balance-foot"><span><span className="dot"></span>Available this month</span><span>{s.income?`${Math.round((s.balance/s.income)*100)}% retained`:''}</span></div></motion.section></section><section className="summary-grid"><Metric label="Income" value={f(s.income)} detail="Money in" icon={<ArrowDownLeft size={18}/>} tone="positive"/><Metric label="Expenses" value={f(s.expenses)} detail="Money spent" icon={<ArrowUpRight size={18}/>} tone="negative"/><Metric label="Previous dues" value={f(s.dues)} detail="Separate from expenses" icon={<Landmark size={18}/>} tone="neutral"/><Metric label="Paid out" value={f(s.paidOut)} detail="Expenses + dues" icon={<CircleDollarSign size={18}/>} tone="neutral"/></section><section className="section-block budget-overview"><div className="section-title"><div><p className="eyebrow">Monthly plan</p><h2>Budget overview</h2></div><button className="text-button" onClick={()=>setPage('budget',1)}>Manage <ChevronRight size={15}/></button></div>{s.budget?<><div className="budget-main"><div><strong>{f(s.expenses)} <span>of {f(s.budget)}</span></strong><p>{f(s.budgetRemaining)} remaining</p></div><b className={`percentage ${state}`}>{Math.round(s.budgetUsed)}% used</b></div><Progress value={s.budgetUsed} state={state}/></>:<div className="inline-empty"><p>Give every rupee a job with a monthly budget.</p><button className="button compact" onClick={()=>setPage('budget',1)}>Set budget</button></div>}</section><section className="section-block"><div className="section-title"><div><p className="eyebrow">Spend smarter</p><h2>Quick expense</h2></div><span className="muted">One tap to start</span></div><div className="quick-grid">{['Food & Dining','Groceries','Transport','Fuel','Snacks'].map(c=>{const I=categoryIcons[c]??ReceiptText;return <button key={c} onClick={()=>open('expense',c)}><span><I size={20}/></span>{c}</button>})}</div></section><section className="section-block recent"><div className="section-title"><div><p className="eyebrow">Your activity</p><h2>Recent transactions</h2></div><button className="text-button" onClick={()=>setPage('ledger',1)}>See all <ChevronRight size={15}/></button></div>{recent.length?<div className="transactions mini">{recent.map(t=><TransactionRow key={t.id} tx={t} currency={data.settings.currency}/>)}</div>:<p className="muted pad">No transactions yet.</p>}</section></div>}</> }
 function Metric({label,value,detail,icon,tone}:{label:string;value:string;detail:string;icon:React.ReactNode;tone:string}) {return <div className="metric"><span className={`metric-icon ${tone}`}>{icon}</span><div><p>{label}</p><strong>{value}</strong><small>{detail}</small></div></div>}
 
 function Ledger({
@@ -957,7 +1027,8 @@ function Ledger({
   categories: cats,
   open,
   remove,
-  onReconcile
+  onReconcile,
+  onOpenMoneyOwed
 }: {
   transactions: Transaction[]
   currency: string
@@ -965,10 +1036,17 @@ function Ledger({
   open: (t?: TransactionType, c?: string, d?: Transaction) => void
   remove: (id: string) => void
   onReconcile: () => void
+  onOpenMoneyOwed: () => void
 }) {
   const [query, setQuery] = useState('')
   const [type, setType] = useState<'all' | TransactionType>('all')
   const [category, setCategory] = useState('all')
+
+  const receivables = useMemo(() => getOutstandingReceivables(transactions), [transactions])
+  const totalReceivables = useMemo(
+    () => receivables.reduce((sum, r) => sum + r.totalOwed, 0),
+    [receivables]
+  )
 
   // Date filter state: 'all' | 'today' | 'yesterday' | 'specific' | 'range' | 'YYYY-MM'
   const [dateFilter, setDateFilter] = useState('all')
@@ -1078,6 +1156,31 @@ function Ledger({
           <Scale size={15} /> Reconcile
         </button>
       </div>
+
+      {/* Money Owed summary banner */}
+      {receivables.length > 0 && (
+        <div className="money-owed-banner">
+          <div className="owed-banner-left">
+            <div className="owed-icon-circle">
+              <Users size={18} />
+            </div>
+            <div>
+              <div className="text-2xs text-muted font-medium">Money owed to you</div>
+              <div className="text-sm font-bold text-accent">
+                {formatMoney(totalReceivables, currency)} · {receivables.length}{' '}
+                {receivables.length === 1 ? 'person' : 'people'}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="button compact secondary"
+            onClick={onOpenMoneyOwed}
+          >
+            View details
+          </button>
+        </div>
+      )}
 
       <div className="ledger-tools">
         <label className="search">
@@ -1199,6 +1302,9 @@ function TransactionRow({
   onClick?: () => void
 }) {
   const I = tx.type === 'income' ? ArrowDownLeft : tx.type === 'due' ? Landmark : categoryIcons[tx.category] ?? ReceiptText
+  const isSplit = tx.paidFor === 'others' && Array.isArray(tx.splits) && tx.splits.length > 0
+  const isRepayment = tx.type === 'income' && tx.category === 'Friend Repayment'
+
   return (
     <article
       className="transaction"
@@ -1215,6 +1321,8 @@ function TransactionRow({
         <span>
           {tx.category}
           {tx.account ? ` · ${tx.account}` : ''}
+          {isRepayment && tx.repaymentFor?.person ? ` · From ${tx.repaymentFor.person}` : ''}
+          {isSplit && ` · Shared with ${tx.splits!.map((s) => s.person).filter(Boolean).join(', ')}`}
           {tx.recurring ? ' · Recurring' : ''}
           {tx.notes ? ` · ${tx.notes}` : ''}
         </span>
@@ -1223,7 +1331,15 @@ function TransactionRow({
         <strong>
           {tx.type === 'income' ? '+' : '−'} {formatMoney(tx.amount, currency)}
         </strong>
-        <span>{tx.type === 'due' ? 'Due paid' : tx.type}</span>
+        {isSplit ? (
+          <span title={`Personal spending: ${formatMoney(tx.myShare ?? tx.amount, currency)}`}>
+            Personal: {formatMoney(tx.myShare ?? tx.amount, currency)}
+          </span>
+        ) : isRepayment ? (
+          <span>Repayment</span>
+        ) : (
+          <span>{tx.type === 'due' ? 'Due paid' : tx.type}</span>
+        )}
       </div>
       {actions && (
         <div className="row-actions" onClick={(e) => e.stopPropagation()}>
@@ -1250,7 +1366,9 @@ function BudgetPage({
 }) {
   const f = (n: number) => formatMoney(n, data.settings.currency)
   const budgets = data.budgets
-  const totalSpent = snapshot(data.transactions, data.settings).expenses
+  const totalCategoryBudget = budgets.reduce((acc, b) => acc + (b.limit || 0), 0)
+  const effectiveMonthlyBudget = data.settings.monthlyBudget > 0 ? data.settings.monthlyBudget : totalCategoryBudget
+  const totalSpent = snapshot(data.transactions, data.settings, undefined, data.budgets).expenses
   const setOverall = (raw: string) => {
     const amount = Math.max(0, Number(raw) || 0)
     save({ ...data, settings: { ...data.settings, monthlyBudget: amount } })
@@ -1298,8 +1416,13 @@ function BudgetPage({
       <section className="overall-budget">
         <div>
           <span className="eyebrow">Monthly overall budget</span>
-          <h2>{f(data.settings.monthlyBudget)}</h2>
-          <p>{f(totalSpent)} spent this month</p>
+          <h2>{f(effectiveMonthlyBudget)}</h2>
+          <p>
+            {f(totalSpent)} spent this month
+            {data.settings.monthlyBudget <= 0 && totalCategoryBudget > 0
+              ? ` · Sum of ${budgets.length} category ${budgets.length === 1 ? 'budget' : 'budgets'}`
+              : ''}
+          </p>
         </div>
         <label>
           <span>Set monthly limit</span>
@@ -1309,7 +1432,7 @@ function BudgetPage({
             inputMode="decimal"
             value={data.settings.monthlyBudget || ''}
             onChange={(e) => setOverall(e.target.value)}
-            placeholder="0"
+            placeholder={totalCategoryBudget > 0 ? String(totalCategoryBudget) : '0'}
           />
         </label>
       </section>
@@ -1393,7 +1516,7 @@ function BudgetPage({
   )
 }
 
-function StatsPage({ data }: { data: FinanceData }) {
+function StatsPage({ data, setPage }: { data: FinanceData; setPage?: (p: Page, dir?: number) => void }) {
   const f = (n: number) => formatMoney(n, data.settings.currency)
   const [selected, setSelected] = useState(monthKey())
 
@@ -1425,8 +1548,9 @@ function StatsPage({ data }: { data: FinanceData }) {
   }
 
   const sel = monthStats(selected)
-  const budgetForSelected = data.settings.monthlyBudget
-  const budgetUsedPct = budgetForSelected > 0 ? Math.min(100, sel.expenses / budgetForSelected * 100) : 0
+  const totalCategoryBudget = data.budgets.reduce((acc, b) => acc + (b.limit || 0), 0)
+  const budgetForSelected = data.settings.monthlyBudget > 0 ? data.settings.monthlyBudget : totalCategoryBudget
+  const budgetUsedPct = budgetForSelected > 0 ? Math.min(100, (sel.expenses / budgetForSelected) * 100) : 0
   const budgetRemaining = budgetForSelected > 0 ? Math.max(0, budgetForSelected - sel.expenses) : 0
 
   // Category spending for selected month, sorted highest→lowest
@@ -1517,11 +1641,23 @@ function StatsPage({ data }: { data: FinanceData }) {
               </div>
               <div>
                 <strong>{f(budgetRemaining)}</strong>
-                <p>still available</p>
+                <p>still available of {f(budgetForSelected)}</p>
               </div>
             </div>
           ) : (
-            <div className="chart-empty">Set a monthly budget in Settings to track progress.</div>
+            <div className="chart-empty">
+              <p style={{ margin: 0, fontSize: 13 }}>Set a monthly budget in the Budget tab to track progress.</p>
+              {setPage && (
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => setPage('budget', 1)}
+                  style={{ marginTop: 8 }}
+                >
+                  Go to Budget <ChevronRight size={14} />
+                </button>
+              )}
+            </div>
           )}
         </section>
 
@@ -1828,63 +1964,68 @@ function ConfigPage({
         </button>
       </ConfigSection>
 
-      <ConfigSection title="Theme & appearance">
-        <div className="theme-scroller">
-          {themes.map(t=>(
-            <button key={t.id} className={`theme-card ${t.id} ${data.settings.theme===t.id?'selected':''}`} onClick={()=>setSettings({theme:t.id})}>
-              <span className="theme-preview"><i/><i/><i/></span>
-              <strong>{t.name}</strong>
-              <small>{t.copy}</small>
-              {data.settings.theme===t.id&&<b><Check size={13}/></b>}
-            </button>
-          ))}
+      <ConfigSection title="Preferences">
+        <div className="mb-4">
+          <label className="text-xs font-semibold text-muted uppercase tracking-wider block mb-2">Theme & appearance</label>
+          <div className="theme-scroller">
+            {themes.map(t=>(
+              <button key={t.id} className={`theme-card ${t.id} ${data.settings.theme===t.id?'selected':''}`} onClick={()=>setSettings({theme:t.id})}>
+                <span className="theme-preview"><i/><i/><i/></span>
+                <strong>{t.name}</strong>
+                <small>{t.copy}</small>
+                {data.settings.theme===t.id&&<b><Check size={13}/></b>}
+              </button>
+            ))}
+          </div>
         </div>
-      </ConfigSection>
 
-      <ConfigSection title="Security">
-        <ToggleRow title="App lock" detail={data.settings.appLockPin?"Require 4-digit PIN on app open":"Set up 4-digit PIN lock"} on={data.settings.appLock} set={(v)=>{if(v){if(data.settings.appLockPin){setSettings({appLock:true});toast('App Lock enabled')}else{setModal({mode:'pin_setup',nextAction:'appLock'})}}else{setSettings({appLock:false});toast('App Lock disabled')}}}/>
-        <ToggleRow title="Biometric lock" detail="Unlock with Touch ID, Face ID or Windows Hello" on={data.settings.biometricLock} set={async(v)=>{if(v){const available=await security.isBiometricAvailable();if(!available){toast('Platform biometrics / Windows Hello not available on this browser/device');return}if(!data.settings.appLockPin){toast('Please set an App PIN first as backup');setModal({mode:'pin_setup',nextAction:'biometricLock'});return}const reg=await security.registerBiometric();if(reg){setSettings({biometricLock:true});toast('Biometric lock enabled')}else{toast('Biometric registration was cancelled')}}else{setSettings({biometricLock:false});toast('Biometric lock disabled')}}}/>
-        {data.settings.appLockPin&&<SettingRow icon={<KeyRound size={18}/>} title="Change PIN" detail="Update your 4-digit security code"><button className="button compact ghost" onClick={()=>setModal({mode:'pin_setup',nextAction:'changePin'})}>Change PIN</button></SettingRow>}
-        {(data.settings.appLock||data.settings.biometricLock)&&<button className="data-action" onClick={()=>{sessionStorage.removeItem('thogai_unlocked');setIsLocked(true)}}><LockKeyhole size={18}/><span><strong>Lock App Now</strong><small>Return to secure lock screen immediately</small></span><ChevronRight size={17}/></button>}
-      </ConfigSection>
+        <div className="mb-4 pt-3 border-t border-border-subtle">
+          <label className="text-xs font-semibold text-muted uppercase tracking-wider block mb-2">Security</label>
+          <ToggleRow title="App lock" detail={data.settings.appLockPin?"Require 4-digit PIN on app open":"Set up 4-digit PIN lock"} on={data.settings.appLock} set={(v)=>{if(v){if(data.settings.appLockPin){setSettings({appLock:true});toast('App Lock enabled')}else{setModal({mode:'pin_setup',nextAction:'appLock'})}}else{setSettings({appLock:false});toast('App Lock disabled')}}}/>
+          <ToggleRow title="Biometric lock" detail="Unlock with Touch ID, Face ID or Windows Hello" on={data.settings.biometricLock} set={async(v)=>{if(v){const available=await security.isBiometricAvailable();if(!available){toast('Platform biometrics / Windows Hello not available on this browser/device');return}if(!data.settings.appLockPin){toast('Please set an App PIN first as backup');setModal({mode:'pin_setup',nextAction:'biometricLock'});return}const reg=await security.registerBiometric();if(reg){setSettings({biometricLock:true});toast('Biometric lock enabled')}else{toast('Biometric registration was cancelled')}}else{setSettings({biometricLock:false});toast('Biometric lock disabled')}}}/>
+          {data.settings.appLockPin&&<SettingRow icon={<KeyRound size={18}/>} title="Change PIN" detail="Update your 4-digit security code"><button className="button compact ghost" onClick={()=>setModal({mode:'pin_setup',nextAction:'changePin'})}>Change PIN</button></SettingRow>}
+          {(data.settings.appLock||data.settings.biometricLock)&&<button className="data-action" onClick={()=>{sessionStorage.removeItem('thogai_unlocked');setIsLocked(true)}}><LockKeyhole size={18}/><span><strong>Lock App Now</strong><small>Return to secure lock screen immediately</small></span><ChevronRight size={17}/></button>}
+        </div>
 
-      <ConfigSection title="AI Advisor">
-        <SettingRow icon={<Sparkles size={18}/>} title="Smart Financial Insights" detail="Personalized spending breakdowns and budget strategies">
-          <span style={{fontSize:11,fontWeight:600,padding:'4px 9px',borderRadius:12,background:'var(--surface-soft)',border:'1px solid var(--border)',color:'var(--accent)'}}>Active</span>
-        </SettingRow>
-        <button className="data-action" onClick={()=>setModal({mode:'ai'})}><Bot size={18}/><span><strong>Open AI Advisor</strong><small>Ask questions about your spending, budget & savings</small></span><ChevronRight size={17}/></button>
-      </ConfigSection>
+        <div className="mb-4 pt-3 border-t border-border-subtle">
+          <label className="text-xs font-semibold text-muted uppercase tracking-wider block mb-2">AI Advisor</label>
+          <button className="data-action" onClick={()=>setModal({mode:'ai'})}><Bot size={18}/><span><strong>Open AI Advisor</strong><small>Ask questions about your spending, budget & savings</small></span><ChevronRight size={17}/></button>
+        </div>
 
-      <ConfigSection title="Notifications">
-        <ToggleRow title="Budget alerts" detail="When you approach a limit" on={data.settings.notifications.budget} set={v=>setSettings({notifications:{...data.settings.notifications,budget:v}})}/>
-        <ToggleRow title="Due reminders" detail="Keep outstanding payments visible" on={data.settings.notifications.dues} set={v=>setSettings({notifications:{...data.settings.notifications,dues:v}})}/>
-        <ToggleRow title="Monthly summaries" detail="A fresh financial recap" on={data.settings.notifications.summary} set={v=>setSettings({notifications:{...data.settings.notifications,summary:v}})}/>
-      </ConfigSection>
+        <div className="mb-4 pt-3 border-t border-border-subtle">
+          <label className="text-xs font-semibold text-muted uppercase tracking-wider block mb-2">Notifications</label>
+          <ToggleRow title="Budget alerts" detail="When you approach a limit" on={data.settings.notifications.budget} set={v=>setSettings({notifications:{...data.settings.notifications,budget:v}})}/>
+          <ToggleRow title="Due reminders" detail="Keep outstanding payments visible" on={data.settings.notifications.dues} set={v=>setSettings({notifications:{...data.settings.notifications,dues:v}})}/>
+          <ToggleRow title="Monthly summaries" detail="A fresh financial recap" on={data.settings.notifications.summary} set={v=>setSettings({notifications:{...data.settings.notifications,summary:v}})}/>
+        </div>
 
-      <ConfigSection title="Reconciliation">
-        <button className="data-action" onClick={() => setModal({ mode: 'reconcile' })}>
-          <Scale size={18} />
-          <span>
-            <strong>Reconcile bank statements</strong>
-            <small>Match PDF, CSV or Excel statements against THOGAI</small>
-          </span>
-          <ChevronRight size={17} />
-        </button>
-        <button className="data-action" onClick={() => setModal({ mode: 'reconciliation_history' })}>
-          <History size={18} />
-          <span>
-            <strong>Reconciliation history</strong>
-            <small>Review past reconciled statement snapshots</small>
-          </span>
-          <ChevronRight size={17} />
-        </button>
-      </ConfigSection>
+        <div className="mb-4 pt-3 border-t border-border-subtle">
+          <label className="text-xs font-semibold text-muted uppercase tracking-wider block mb-2">Reconciliation</label>
+          <button className="data-action" onClick={() => setModal({ mode: 'reconcile' })}>
+            <Scale size={18} />
+            <span>
+              <strong>Reconcile bank statements</strong>
+              <small>Match PDF, CSV or Excel statements against THOGAI</small>
+            </span>
+            <ChevronRight size={17} />
+          </button>
+          <button className="data-action" onClick={() => setModal({ mode: 'reconciliation_history' })}>
+            <History size={18} />
+            <span>
+              <strong>Reconciliation history</strong>
+              <small>Review past reconciled statement snapshots</small>
+            </span>
+            <ChevronRight size={17} />
+          </button>
+        </div>
 
-      <ConfigSection title="Data">
-        <button className="data-action" onClick={exportData}><Download size={18}/><span><strong>Export data</strong><small>Save a complete THOGAI backup</small></span><ChevronRight size={17}/></button>
-        <button className="data-action" onClick={()=>input.current?.click()}><FileUp size={18}/><span><strong>Import data</strong><small>Restore from a THOGAI backup</small></span><ChevronRight size={17}/></button>
-        <input ref={input} hidden type="file" accept="application/json" onChange={e=>importData(e.target.files?.[0])}/>
-        <button className="data-action delete" onClick={clear}><Trash2 size={18}/><span><strong>Clear local data</strong><small>Remove all transactions and settings</small></span><ChevronRight size={17}/></button>
+        <div className="pt-3 border-t border-border-subtle">
+          <label className="text-xs font-semibold text-muted uppercase tracking-wider block mb-2">Data & Backup</label>
+          <button className="data-action" onClick={exportData}><Download size={18}/><span><strong>Export data</strong><small>Save a complete THOGAI backup</small></span><ChevronRight size={17}/></button>
+          <button className="data-action" onClick={()=>input.current?.click()}><FileUp size={18}/><span><strong>Import data</strong><small>Restore from a THOGAI backup</small></span><ChevronRight size={17}/></button>
+          <input ref={input} hidden type="file" accept="application/json" onChange={e=>importData(e.target.files?.[0])}/>
+          <button className="data-action delete" onClick={clear}><Trash2 size={18}/><span><strong>Clear local data</strong><small>Remove all transactions and settings</small></span><ChevronRight size={17}/></button>
+        </div>
       </ConfigSection>
 
       <ConfigSection title="About">
@@ -1922,6 +2063,8 @@ function TransactionModal({
   incomeCategories: incomeCats = defaultIncomeCategories,
   accounts,
   defaultAccount,
+  allTransactions = [],
+  repaymentFor,
   close,
   submit
 }: {
@@ -1933,22 +2076,95 @@ function TransactionModal({
   incomeCategories?: string[]
   accounts: string[]
   defaultAccount: string
+  allTransactions?: Transaction[]
+  repaymentFor?: {
+    person: string
+    amount?: number
+    splitId?: string
+    originatingTxId?: string
+  }
   close: () => void
   submit: (t: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>, id?: string) => void
 }) {
-  const initialType = initial?.type ?? type
+  const initialType = initial?.type ?? (repaymentFor ? 'income' : type)
   const availableCats = initialType === 'income' ? incomeCats : expenseCats
+  const initialCategory =
+    initial?.category ??
+    (repaymentFor
+      ? 'Friend Repayment'
+      : category ?? (availableCats[0] || 'Other'))
+
   const [form, setForm] = useState({
     type: initialType,
-    amount: initial?.amount ? String(initial.amount) : '',
-    category: initial?.category ?? category ?? (availableCats[0] || 'Other'),
+    amount: initial?.amount ? String(initial.amount) : repaymentFor?.amount ? String(repaymentFor.amount) : '',
+    category: initialCategory,
     account: initial?.account ?? defaultAccount ?? (accounts[0] || 'Cash'),
-    description: initial?.description ?? '',
+    description: initial?.description ?? (repaymentFor?.person ? `Repayment from ${repaymentFor.person}` : ''),
     date: initial?.date ?? today(),
     notes: initial?.notes ?? '',
     recurring: initial?.recurring ?? false
   })
+
+  // Paid for others state
+  const [paidFor, setPaidFor] = useState<'myself' | 'others'>(initial?.paidFor ?? 'myself')
+  const [myShare, setMyShare] = useState<string>(() => {
+    if (initial?.myShare !== undefined) return String(initial.myShare)
+    if (initial?.amount) return String(initial.amount)
+    return ''
+  })
+  const [splits, setSplits] = useState<Array<{ id: string; person: string; amount: number; convertedToMyExpense?: number }>>(() => {
+    if (initial?.splits && initial.splits.length > 0) {
+      return initial.splits.map((s) => ({ ...s }))
+    }
+    return [{ id: newId(), person: '', amount: 0 }]
+  })
+
+  // Repayment state
+  const [repPerson, setRepPerson] = useState<string>(
+    initial?.repaymentFor?.person ?? repaymentFor?.person ?? ''
+  )
+  const [repSplitId] = useState<string | undefined>(
+    initial?.repaymentFor?.splitId ?? repaymentFor?.splitId
+  )
+  const [repOriginatingTxId] = useState<string | undefined>(
+    initial?.repaymentFor?.originatingTxId ?? repaymentFor?.originatingTxId
+  )
+  const [repOwedAmount] = useState<number | undefined>(repaymentFor?.amount)
+
   const [error, setError] = useState('')
+
+  // Gather known people suggestions
+  const knownPeople = useMemo(() => {
+    const map = new Map<string, string>()
+    allTransactions.forEach((t) => {
+      if (t.splits) {
+        t.splits.forEach((s) => {
+          const trimmed = (s.person || '').trim()
+          if (trimmed) {
+            const k = normalizePersonName(trimmed)
+            if (!map.has(k)) map.set(k, trimmed)
+          }
+        })
+      }
+      if (t.repaymentFor?.person) {
+        const trimmed = t.repaymentFor.person.trim()
+        if (trimmed) {
+          const k = normalizePersonName(trimmed)
+          if (!map.has(k)) map.set(k, trimmed)
+        }
+      }
+    })
+    return Array.from(map.values())
+  }, [allTransactions])
+
+  // Split calculations
+  const totalAmt = Number(form.amount) || 0
+  const userShareAmt = Number(myShare) || 0
+  const sumSplits = splits.reduce((acc, s) => acc + (Number(s.amount) || 0), 0)
+  const totalAllocated = userShareAmt + sumSplits
+  const remainingToAllocate = totalAmt - totalAllocated
+  const isSplitBalanced = Math.abs(remainingToAllocate) < 0.01 && totalAmt > 0
+  const currencySymbol = currencies.find((c) => c.code === currency)?.symbol ?? '₹'
 
   const handleTypeChange = (t: TransactionType) => {
     const nextCats = t === 'income' ? incomeCats : expenseCats
@@ -1957,14 +2173,82 @@ function TransactionModal({
       type: t,
       category: nextCats.includes(p.category) ? p.category : (nextCats[0] || 'Other')
     }))
+    if (t !== 'expense') {
+      setPaidFor('myself')
+    }
   }
 
   const change = (key: string, value: string | boolean) => setForm((p) => ({ ...p, [key]: value }))
+
+  const handleAddSplit = () => {
+    setSplits([...splits, { id: newId(), person: '', amount: 0 }])
+  }
+
+  const handleUpdateSplit = (id: string, field: 'person' | 'amount', val: string) => {
+    setSplits(
+      splits.map((s) => {
+        if (s.id !== id) return s
+        if (field === 'person') return { ...s, person: val }
+        return { ...s, amount: Math.max(0, Number(val) || 0) }
+      })
+    )
+  }
+
+  const handleRemoveSplit = (id: string) => {
+    if (splits.length <= 1) return
+    setSplits(splits.filter((s) => s.id !== id))
+  }
+
   const save = () => {
     const amount = Number(form.amount)
     if (!Number.isFinite(amount) || amount <= 0) return setError('Enter an amount greater than zero.')
     if (!form.category) return setError('Choose a category.')
-    submit({ ...form, amount }, initial?.id)
+
+    if (form.type === 'expense' && paidFor === 'others') {
+      if (userShareAmt < 0) return setError('Your share cannot be negative.')
+      for (const s of splits) {
+        if (!s.person.trim()) return setError('Please specify names for all people in the split.')
+        if (!s.amount || s.amount <= 0) return setError(`Please enter a valid amount for ${s.person || 'all people'}.`)
+      }
+      if (!isSplitBalanced) {
+        return setError(`The allocated shares (${currencySymbol}${totalAllocated}) must equal the total amount (${currencySymbol}${totalAmt}).`)
+      }
+      submit(
+        {
+          ...form,
+          amount,
+          paidFor: 'others',
+          myShare: userShareAmt,
+          splits: splits.map((s) => ({
+            id: s.id,
+            person: s.person.trim(),
+            amount: s.amount,
+            convertedToMyExpense: s.convertedToMyExpense
+          }))
+        },
+        initial?.id
+      )
+      return
+    }
+
+    if (form.type === 'income' && form.category === 'Friend Repayment') {
+      if (!repPerson.trim()) return setError('Please specify who made the repayment.')
+      submit(
+        {
+          ...form,
+          amount,
+          repaymentFor: {
+            person: repPerson.trim(),
+            splitId: repSplitId,
+            originatingTxId: repOriginatingTxId
+          }
+        },
+        initial?.id
+      )
+      return
+    }
+
+    submit({ ...form, amount, paidFor: 'myself' }, initial?.id)
   }
 
   const currentCats = form.type === 'income' ? incomeCats : expenseCats
@@ -1989,10 +2273,11 @@ function TransactionModal({
           </button>
         ))}
       </div>
+
       <label className="amount-field">
         <span>Amount</span>
         <div>
-          <b>{currencies.find((c) => c.code === currency)?.symbol ?? '₹'}</b>
+          <b>{currencySymbol}</b>
           <input
             autoFocus
             type="number"
@@ -2000,11 +2285,170 @@ function TransactionModal({
             min="0"
             step="0.01"
             value={form.amount}
-            onChange={(e) => change('amount', e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value
+              change('amount', val)
+              if (paidFor === 'others' && !myShare) {
+                setMyShare(val)
+              }
+            }}
             placeholder="0"
           />
         </div>
       </label>
+
+      {/* Paid for: Myself vs Someone else (for expenses) */}
+      {form.type === 'expense' && (
+        <div className="form-group mb-3">
+          <label>
+            Paid for
+            <ThemedSelect
+              compact
+              value={paidFor}
+              onChange={(v) => {
+                const next = v as 'myself' | 'others'
+                setPaidFor(next)
+                if (next === 'others' && !myShare && form.amount) {
+                  setMyShare(form.amount)
+                }
+              }}
+              options={[
+                { value: 'myself', label: 'Myself' },
+                { value: 'others', label: 'Someone else' }
+              ]}
+            />
+          </label>
+        </div>
+      )}
+
+      {/* Progressive split builder when Paid for Someone else */}
+      {form.type === 'expense' && paidFor === 'others' && (
+        <motion.div
+          className="split-builder-section"
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+        >
+          <div className="split-builder-header">
+            <strong>Split breakdown</strong>
+            <span>Total: {currencySymbol}{form.amount || '0'}</span>
+          </div>
+
+          <div className="split-user-row">
+            <span>You</span>
+            <div className="input-with-currency">
+              <span className="input-prefix">{currencySymbol}</span>
+              <input
+                type="number"
+                step="any"
+                min="0"
+                placeholder="0"
+                value={myShare}
+                onChange={(e) => setMyShare(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {splits.map((s) => (
+              <div key={s.id} className="split-person-row">
+                <input
+                  list="datalist-known-people"
+                  placeholder="Person name (e.g. Arun)"
+                  value={s.person}
+                  onChange={(e) => handleUpdateSplit(s.id, 'person', e.target.value)}
+                />
+                <div className="input-with-currency">
+                  <span className="input-prefix">{currencySymbol}</span>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    placeholder="0"
+                    value={s.amount || ''}
+                    onChange={(e) => handleUpdateSplit(s.id, 'amount', e.target.value)}
+                  />
+                </div>
+                {splits.length > 1 && (
+                  <button
+                    type="button"
+                    className="split-remove-btn"
+                    onClick={() => handleRemoveSplit(s.id)}
+                    title="Remove split"
+                  >
+                    <X size={15} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            className="button compact secondary self-start flex items-center gap-1 mt-1"
+            onClick={handleAddSplit}
+          >
+            <Plus size={14} /> Add another person
+          </button>
+
+          {/* Real-time Allocation Validation Pill */}
+          <div
+            className={`split-status ${
+              isSplitBalanced
+                ? 'allocated'
+                : remainingToAllocate > 0
+                ? 'unallocated'
+                : 'error'
+            }`}
+          >
+            {isSplitBalanced ? (
+              <span>✓ {currencySymbol}{totalAmt} / {currencySymbol}{totalAmt} allocated</span>
+            ) : remainingToAllocate > 0 ? (
+              <span>
+                {currencySymbol}{totalAllocated} / {currencySymbol}{totalAmt} allocated · {currencySymbol}{remainingToAllocate.toFixed(2)} remaining
+              </span>
+            ) : (
+              <span>
+                {currencySymbol}{totalAllocated} / {currencySymbol}{totalAmt} allocated · {currencySymbol}{Math.abs(remainingToAllocate).toFixed(2)} over
+              </span>
+            )}
+          </div>
+        </motion.div>
+      )}
+
+      {/* Friend Repayment details (for income) */}
+      {form.type === 'income' && form.category === 'Friend Repayment' && (
+        <div className="split-builder-section mb-3">
+          <div className="split-builder-header">
+            <strong>Repayment Details</strong>
+            {repOwedAmount !== undefined && (
+              <span className="text-accent font-semibold">
+                Owed: {currencySymbol}{repOwedAmount}
+              </span>
+            )}
+          </div>
+          <label>
+            Repaid by
+            <input
+              list="datalist-known-people"
+              placeholder="Person name (e.g. Arun)"
+              value={repPerson}
+              onChange={(e) => setRepPerson(e.target.value)}
+              required
+            />
+          </label>
+          <div className="text-2xs text-muted">
+            Friend repayments credit your account balance and reduce outstanding debt without being counted as earned income.
+          </div>
+        </div>
+      )}
+
+      <datalist id="datalist-known-people">
+        {knownPeople.map((p) => (
+          <option key={p} value={p} />
+        ))}
+      </datalist>
+
       <div className="form-grid">
         <label>
           Category
@@ -2028,6 +2472,7 @@ function TransactionModal({
           />
         </label>
       </div>
+
       <div className="form-grid">
         <label>
           Account / Spend Type
@@ -2051,6 +2496,7 @@ function TransactionModal({
           />
         </label>
       </div>
+
       <label>
         Notes <span className="optional">optional</span>
         <textarea
@@ -2060,6 +2506,7 @@ function TransactionModal({
           rows={2}
         />
       </label>
+
       <label className="recurring">
         <input
           type="checkbox"
@@ -2071,7 +2518,9 @@ function TransactionModal({
           <small>Mark this for easy recognition in your ledger.</small>
         </span>
       </label>
+
       {error && <p className="form-error">{error}</p>}
+
       <div className="modal-actions">
         <button className="button ghost" onClick={close}>
           Cancel

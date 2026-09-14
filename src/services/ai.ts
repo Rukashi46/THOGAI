@@ -28,7 +28,7 @@ export interface ConversationTurn {
 
 export function buildFinancialContext(transactions: Transaction[], budgets: Budget[], settings: Settings): FinancialContext {
   const currentKey = monthKey()
-  const s = snapshot(transactions, settings, currentKey)
+  const s = snapshot(transactions, settings, currentKey, budgets)
   const currentExpenses = transactions.filter(t => t.type === 'expense' && t.date.slice(0, 7) === currentKey)
 
   const categoryTotals: Record<string, number> = {}

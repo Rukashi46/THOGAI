@@ -27,6 +27,8 @@ interface DropdownCoords {
   top: number
   left: number
   width: number
+  minWidth: number
+  maxWidth: number
   maxHeight: number
   isUpward: boolean
 }
@@ -74,11 +76,13 @@ export function ThemedSelect({
 
     const isUpward = spaceBelow < estimatedHeight && spaceAbove > spaceBelow
     const maxHeight = isUpward
-      ? Math.min(260, Math.max(120, spaceAbove - 10))
-      : Math.min(260, Math.max(120, spaceBelow - 10))
+      ? Math.min(280, Math.max(120, spaceAbove - 10))
+      : Math.min(280, Math.max(120, spaceBelow - 10))
 
-    const minW = Math.max(rect.width, compact ? 150 : 180)
-    const targetWidth = Math.min(Math.max(minW, 200), viewportWidth - 24)
+    const minWidth = rect.width
+    const maxSafeWidth = Math.max(160, viewportWidth - 24)
+    // At least trigger width, may expand up to safe viewport width if content or mobile warrants it
+    const targetWidth = Math.min(Math.max(minWidth, compact ? 150 : 200), maxSafeWidth)
 
     let left = rect.left
     if (left + targetWidth > viewportWidth - 12) {
@@ -92,6 +96,8 @@ export function ThemedSelect({
       top,
       left,
       width: targetWidth,
+      minWidth: Math.min(minWidth, maxSafeWidth),
+      maxWidth: maxSafeWidth,
       maxHeight,
       isUpward
     })

@@ -1,20 +1,19 @@
 import React, { useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
-  ArrowLeft, ArrowRight, BarChart3, Bot, Check, CheckCircle2, ChevronRight,
-  CircleDollarSign, CreditCard, Landmark, Plus, Scale, ShieldCheck, Sparkles,
+  ArrowLeft, ArrowRight, BarChart3, Bot, Check, CheckCircle2,
+  CircleDollarSign, Landmark, Plus, Scale, ShieldCheck,
   Trash2, User, WalletCards, X
 } from 'lucide-react'
-import { currencies, formatMoney, newId } from '../lib/finance'
+import { currencies, formatMoney } from '../lib/finance'
 import {
   defaultAccounts, defaultExpenseCategories, defaultIncomeCategories,
-  type FinanceData, type Settings, type Transaction
+  type Settings, type Transaction
 } from '../services/storage'
-import { ThemedSelect } from './ThemedSelect'
 import {
   backdropVariants, desktopModalVariants, mobileSheetVariants,
   reducedMotionVariants, wordRevealContainer, wordRevealItem,
-  onboardingStepVariants, iosSpring, buttonTap, primaryButtonTap
+  onboardingStepVariants, buttonTap, primaryButtonTap
 } from '../lib/motion'
 
 interface OnboardingModalProps {
@@ -26,7 +25,7 @@ interface OnboardingModalProps {
   }) => Promise<void> | void
 }
 
-const TOTAL_STEPS = 8
+const TOTAL_STEPS = 5
 
 function AnimatedHeading({ text, className = '' }: { text: string; className?: string }) {
   const reduced = useReducedMotion()
@@ -82,8 +81,11 @@ export function OnboardingModal({
   const [step, setStep] = useState(1)
   const [direction, setDirection] = useState(1)
 
-  // Step state
+  // Step 2: Personalize
+  const [nickname, setNickname] = useState<string>(currentSettings.name || '')
   const [selectedCurrency, setSelectedCurrency] = useState(currentSettings.currency || 'INR')
+
+  // Step 3: Categories
   const [expenseCats, setExpenseCats] = useState<string[]>(
     currentSettings.categories || defaultExpenseCategories
   )
@@ -93,23 +95,12 @@ export function OnboardingModal({
   const [newCatInput, setNewCatInput] = useState('')
   const [newCatType, setNewCatType] = useState<'expense' | 'income'>('expense')
 
-  // Accounts state with opening balances
+  // Step 4: Accounts & Initial Balances
   const [accounts, setAccounts] = useState<Array<{ name: string; openingBalance: string }>>(() => {
     const list = currentSettings.accounts || defaultAccounts
     return list.map((a) => ({ name: a, openingBalance: '' }))
   })
   const [newAccInput, setNewAccInput] = useState('')
-
-  // Budget state
-  const [monthlyBudget, setMonthlyBudget] = useState<string>(
-    currentSettings.monthlyBudget ? String(currentSettings.monthlyBudget) : ''
-  )
-
-  // Nickname state
-  const [nickname, setNickname] = useState<string>(currentSettings.name || '')
-
-  // Tour active tab
-  const [tourTab, setTourTab] = useState<number>(0)
 
   const goTo = (nextStep: number) => {
     setDirection(nextStep > step ? 1 : -1)
@@ -131,42 +122,22 @@ export function OnboardingModal({
   }
 
   const finish = () => {
+    // Sum opening balances to set startingBalance in settings without creating earned income
+    const sumOpening = accounts.reduce((acc, a) => acc + (Number(a.openingBalance) || 0), 0)
+
     const patch: Partial<Settings> = {
       currency: selectedCurrency,
       categories: expenseCats,
       incomeCategories: incomeCats,
       accounts: accounts.map((a) => a.name).filter(Boolean),
       defaultAccount: accounts[0]?.name || 'Cash',
-      monthlyBudget: monthlyBudget ? Number(monthlyBudget) : 0,
       name: nickname.trim(),
+      startingBalance: sumOpening,
       onboardingCompleted: true
     }
 
-    // Build initial opening balance transactions if specified
-    const initialTxs: Transaction[] = []
-    const todayStr = new Date().toISOString().slice(0, 10)
-    const nowIso = new Date().toISOString()
-
-    accounts.forEach((acc) => {
-      const bal = Number(acc.openingBalance)
-      if (bal && bal > 0) {
-        initialTxs.push({
-          id: newId(),
-          type: 'income',
-          category: incomeCats.includes('Salary') ? 'Salary' : incomeCats[0] || 'Income',
-          amount: bal,
-          date: todayStr,
-          account: acc.name,
-          description: `Initial balance — ${acc.name}`,
-          notes: 'Opening account balance setup',
-          recurring: false,
-          createdAt: nowIso,
-          updatedAt: nowIso
-        })
-      }
-    })
-
-    onComplete({ settings: patch, initialTransactions: initialTxs })
+    // Do NOT create earned income transactions for initial balances
+    onComplete({ settings: patch })
     close()
   }
 
@@ -192,8 +163,10 @@ export function OnboardingModal({
 
   const handleRemoveCategory = (cat: string, type: 'expense' | 'income') => {
     if (type === 'expense') {
+      if (expenseCats.length <= 1) return
       setExpenseCats(expenseCats.filter((c) => c !== cat))
     } else {
+      if (incomeCats.length <= 1) return
       setIncomeCats(incomeCats.filter((c) => c !== cat))
     }
   }
@@ -299,17 +272,17 @@ export function OnboardingModal({
                   </div>
                   <div className="feature-bullet">
                     <span className="bullet-dot" />
-                    <span>Deterministic bank statement reconciliation</span>
+                    <span>Universal ledger with shared expense support</span>
                   </div>
                   <div className="feature-bullet">
                     <span className="bullet-dot" />
-                    <span>Encrypted cloud backup with full offline capability</span>
+                    <span>Deterministic bank statement reconciliation</span>
                   </div>
                 </div>
               </motion.div>
             )}
 
-            {/* STEP 2: Currency */}
+            {/* STEP 2: Personalize */}
             {step === 2 && (
               <motion.div
                 key="step-2"
@@ -321,35 +294,51 @@ export function OnboardingModal({
                 className="onboarding-step-pane"
               >
                 <div className="step-badge">
-                  <CircleDollarSign size={16} />
+                  <User size={16} />
                   <span>Step 2 of {TOTAL_STEPS}</span>
                 </div>
-                <AnimatedHeading text="Choose your currency" className="onboarding-title" />
+                <AnimatedHeading text="Personalize your experience" className="onboarding-title" />
                 <p className="onboarding-desc">
-                  All your transactions, budgets and insights will format in this currency.
-                  You can change this anytime from Settings.
+                  Choose what THOGAI should call you and select your primary currency.
                 </p>
 
-                <div className="currency-selector-grid">
-                  {currencies.map((c) => (
-                    <button
-                      key={c.code}
-                      type="button"
-                      className={`currency-card ${selectedCurrency === c.code ? 'selected' : ''}`}
-                      onClick={() => setSelectedCurrency(c.code)}
-                    >
-                      <span className="curr-sym">{c.symbol}</span>
-                      <div className="curr-info">
-                        <strong>{c.code}</strong>
-                        <small>{c.name}</small>
-                      </div>
-                      {selectedCurrency === c.code && (
-                        <span className="curr-check">
-                          <Check size={14} />
-                        </span>
-                      )}
-                    </button>
-                  ))}
+                <div className="space-y-4 mt-4">
+                  <div className="nickname-input-card">
+                    <label className="field-label">Preferred Name / Nickname</label>
+                    <input
+                      type="text"
+                      className="nickname-input"
+                      placeholder="e.g. Varun"
+                      value={nickname}
+                      onChange={(e) => setNickname(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+
+                  <div className="currency-section mt-4">
+                    <label className="field-label block mb-2">Primary Currency</label>
+                    <div className="currency-selector-grid">
+                      {currencies.map((c) => (
+                        <button
+                          key={c.code}
+                          type="button"
+                          className={`currency-card ${selectedCurrency === c.code ? 'selected' : ''}`}
+                          onClick={() => setSelectedCurrency(c.code)}
+                        >
+                          <span className="curr-sym">{c.symbol}</span>
+                          <div className="curr-info">
+                            <strong>{c.code}</strong>
+                            <small>{c.name}</small>
+                          </div>
+                          {selectedCurrency === c.code && (
+                            <span className="curr-check">
+                              <Check size={14} />
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </motion.div>
             )}
@@ -432,7 +421,7 @@ export function OnboardingModal({
               </motion.div>
             )}
 
-            {/* STEP 4: Accounts & Opening Balances */}
+            {/* STEP 4: Accounts & Initial Balances */}
             {step === 4 && (
               <motion.div
                 key="step-4"
@@ -449,7 +438,7 @@ export function OnboardingModal({
                 </div>
                 <AnimatedHeading text="Set up your accounts" className="onboarding-title" />
                 <p className="onboarding-desc">
-                  Keep separate balances for cash, bank accounts, and credit cards. Set starting balances so your numbers are honest from day one.
+                  Keep separate balances for cash, bank accounts, and cards. Configure starting balances so your numbers are accurate from day one.
                 </p>
 
                 <div className="accounts-setup-list">
@@ -513,174 +502,10 @@ export function OnboardingModal({
               </motion.div>
             )}
 
-            {/* STEP 5: Monthly Target */}
+            {/* STEP 5: You're Ready */}
             {step === 5 && (
               <motion.div
                 key="step-5"
-                custom={direction}
-                variants={onboardingStepVariants}
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                className="onboarding-step-pane"
-              >
-                <div className="step-badge">
-                  <BarChart3 size={16} />
-                  <span>Step 5 of {TOTAL_STEPS}</span>
-                </div>
-                <AnimatedHeading text="Set a monthly target" className="onboarding-title" />
-                <p className="onboarding-desc">
-                  An overall limit helps you keep track of your spending without feeling restricted.
-                  You can fine-tune individual category budgets anytime.
-                </p>
-
-                <div className="target-input-card">
-                  <label className="field-label">Overall Monthly Limit (Optional)</label>
-                  <div className="big-target-input">
-                    <span className="big-sym">{currencyObj.symbol}</span>
-                    <input
-                      type="number"
-                      placeholder="50,000"
-                      value={monthlyBudget}
-                      onChange={(e) => setMonthlyBudget(e.target.value)}
-                      autoFocus
-                    />
-                  </div>
-                  <small className="target-hint">
-                    Leave blank or 0 to skip setting an overall limit for now.
-                  </small>
-                </div>
-              </motion.div>
-            )}
-
-            {/* STEP 6: Personalize & Nickname */}
-            {step === 6 && (
-              <motion.div
-                key="step-6"
-                custom={direction}
-                variants={onboardingStepVariants}
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                className="onboarding-step-pane"
-              >
-                <div className="step-badge">
-                  <User size={16} />
-                  <span>Step 6 of {TOTAL_STEPS}</span>
-                </div>
-                <AnimatedHeading text="What should THOGAI call you?" className="onboarding-title" />
-                <p className="onboarding-desc">
-                  Your name or nickname appears in your daily greeting and personalized summaries.
-                </p>
-
-                <div className="nickname-input-card">
-                  <label className="field-label">Preferred Name / Nickname</label>
-                  <input
-                    type="text"
-                    className="nickname-input"
-                    placeholder="e.g. Varun"
-                    value={nickname}
-                    onChange={(e) => setNickname(e.target.value)}
-                    autoFocus
-                  />
-                  <small className="nickname-hint">
-                    Synced securely with your encrypted account profile.
-                  </small>
-                </div>
-              </motion.div>
-            )}
-
-            {/* STEP 7: Quick Feature Tour */}
-            {step === 7 && (
-              <motion.div
-                key="step-7"
-                custom={direction}
-                variants={onboardingStepVariants}
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                className="onboarding-step-pane"
-              >
-                <div className="step-badge">
-                  <Sparkles size={16} />
-                  <span>Step 7 of {TOTAL_STEPS}</span>
-                </div>
-                <AnimatedHeading text="Three pillars of THOGAI" className="onboarding-title" />
-                <p className="onboarding-desc">
-                  Designed for peace of mind, honest clarity, and daily reliability.
-                </p>
-
-                <div className="tour-tabs-row">
-                  <button
-                    type="button"
-                    className={`tour-nav-btn ${tourTab === 0 ? 'active' : ''}`}
-                    onClick={() => setTourTab(0)}
-                  >
-                    1. Ledger
-                  </button>
-                  <button
-                    type="button"
-                    className={`tour-nav-btn ${tourTab === 1 ? 'active' : ''}`}
-                    onClick={() => setTourTab(1)}
-                  >
-                    2. Budgets
-                  </button>
-                  <button
-                    type="button"
-                    className={`tour-nav-btn ${tourTab === 2 ? 'active' : ''}`}
-                    onClick={() => setTourTab(2)}
-                  >
-                    3. AI Advisor
-                  </button>
-                </div>
-
-                <div className="tour-card-display">
-                  {tourTab === 0 && (
-                    <div className="tour-card">
-                      <div className="tour-icon ledger">
-                        <Scale size={32} />
-                      </div>
-                      <h3>Universal Ledger</h3>
-                      <p>
-                        Record every rupee in seconds. Filter by date ranges, search across notes, and
-                        reconcile directly against your official bank statements.
-                      </p>
-                    </div>
-                  )}
-
-                  {tourTab === 1 && (
-                    <div className="tour-card">
-                      <div className="tour-icon budget">
-                        <BarChart3 size={32} />
-                      </div>
-                      <h3>Intentional Budgets</h3>
-                      <p>
-                        Category targets that make sense. Visual progress indicators that guide your
-                        spending decisions rather than locking you out.
-                      </p>
-                    </div>
-                  )}
-
-                  {tourTab === 2 && (
-                    <div className="tour-card">
-                      <div className="tour-icon ai">
-                        <Bot size={32} />
-                      </div>
-                      <h3>Private AI Advisor</h3>
-                      <p>
-                        Your personal financial counsel. Ask anything about your spending habits, upcoming
-                        dues, or savings targets with complete local privacy.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            )}
-
-            {/* STEP 8: Ready */}
-            {step === 8 && (
-              <motion.div
-                key="step-8"
                 custom={direction}
                 variants={onboardingStepVariants}
                 initial="initial"
@@ -691,11 +516,37 @@ export function OnboardingModal({
                 <div className="ready-icon-wrap">
                   <CheckCircle2 size={56} className="ready-check" />
                 </div>
-                <AnimatedHeading text="You're all set." className="onboarding-title" />
+                <AnimatedHeading text="You're ready." className="onboarding-title" />
                 <AnimatedParagraph
-                  text="Your financial command center is configured and ready."
+                  text="Your financial command center is configured."
                   className="onboarding-subtitle"
                 />
+
+                <div className="space-y-3 my-4">
+                  <div className="p-3 rounded-lg border border-border-subtle bg-surface-subtle flex items-start gap-3">
+                    <Scale size={20} className="text-accent mt-0.5" />
+                    <div>
+                      <strong className="text-sm block">Ledger</strong>
+                      <span className="text-xs text-muted">Track every inflow and expense.</span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-lg border border-border-subtle bg-surface-subtle flex items-start gap-3">
+                    <BarChart3 size={20} className="text-accent mt-0.5" />
+                    <div>
+                      <strong className="text-sm block">Budget</strong>
+                      <span className="text-xs text-muted">See where your money is going.</span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-lg border border-border-subtle bg-surface-subtle flex items-start gap-3">
+                    <Bot size={20} className="text-accent mt-0.5" />
+                    <div>
+                      <strong className="text-sm block">AI Advisor</strong>
+                      <span className="text-xs text-muted">Get insights based on your financial activity.</span>
+                    </div>
+                  </div>
+                </div>
 
                 <div className="setup-summary-pill-box">
                   <div className="summary-pill">
@@ -705,12 +556,6 @@ export function OnboardingModal({
                   <div className="summary-pill">
                     <span>Accounts</span>
                     <strong>{accounts.length} configured</strong>
-                  </div>
-                  <div className="summary-pill">
-                    <span>Monthly Target</span>
-                    <strong>
-                      {monthlyBudget ? formatMoney(Number(monthlyBudget), selectedCurrency) : 'Flexible'}
-                    </strong>
                   </div>
                   {nickname && (
                     <div className="summary-pill">
@@ -741,7 +586,7 @@ export function OnboardingModal({
           >
             {step === TOTAL_STEPS ? (
               <>
-                Enter THOGAI <ArrowRight size={16} />
+                Finish <ArrowRight size={16} />
               </>
             ) : step === 1 ? (
               <>

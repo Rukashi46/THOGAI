@@ -1,9 +1,53 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { idbStorage, type QueuedSync } from './idb'
-import { storage, type Budget, type FinanceData, type ReconciliationRecord, type Settings, type Transaction } from './storage'
+import { storage, type Budget, type FinanceData, type ReconciliationRecord, type Settings, type Transaction, type SplitShare } from './storage'
 import type { AuthUser } from './auth'
 
 export type SyncState = 'idle' | 'syncing' | 'synced' | 'offline' | 'error'
+
+const META_TAG_PREFIX = '<!--thogai-meta:'
+const META_TAG_SUFFIX = '-->'
+
+export function encodeTransactionNotes(tx: Transaction): string {
+  const baseNotes = (tx.notes || '').replace(/<!--thogai-meta:.*?-->/gs, '').trim()
+  const meta: Record<string, any> = {}
+  if (tx.paidFor) meta.paidFor = tx.paidFor
+  if (tx.myShare !== undefined) meta.myShare = tx.myShare
+  if (tx.splits && tx.splits.length > 0) meta.splits = tx.splits
+  if (tx.repaymentFor) meta.repaymentFor = tx.repaymentFor
+
+  if (Object.keys(meta).length === 0) {
+    return baseNotes
+  }
+  const metaJson = JSON.stringify(meta)
+  return baseNotes ? `${baseNotes}\n${META_TAG_PREFIX}${metaJson}${META_TAG_SUFFIX}` : `${META_TAG_PREFIX}${metaJson}${META_TAG_SUFFIX}`
+}
+
+export function decodeTransactionNotes(rawNotes: string = ''): {
+  notes: string
+  paidFor?: 'myself' | 'others'
+  myShare?: number
+  splits?: SplitShare[]
+  repaymentFor?: { person: string; splitId?: string; originatingTxId?: string }
+} {
+  const match = rawNotes.match(/<!--thogai-meta:(.*?)-->/s)
+  const cleanNotes = rawNotes.replace(/<!--thogai-meta:.*?-->/gs, '').trim()
+  if (!match) {
+    return { notes: cleanNotes }
+  }
+  try {
+    const meta = JSON.parse(match[1])
+    return {
+      notes: cleanNotes,
+      paidFor: meta.paidFor,
+      myShare: meta.myShare,
+      splits: meta.splits,
+      repaymentFor: meta.repaymentFor
+    }
+  } catch {
+    return { notes: cleanNotes }
+  }
+}
 
 type SyncListener = (state: SyncState, lastSyncedAt: Date | null) => void
 
@@ -59,55 +103,54 @@ class CloudSyncService {
    * Pull all cloud data for the authenticated user and merge with local IndexedDB (Last-Write-Wins).
    */
   public async pull(user: AuthUser, localData: FinanceData): Promise<FinanceData> {
-    if (!isSupabaseConfigured()) {
-      return localData
-    }
-    if (!navigator.onLine) {
-      this.setSyncState('offline')
-      return localData
-    }
+    if (!isSupabaseConfigured()) return localData
 
-    this.setSyncState('syncing')
     try {
-      // 1. Fetch Cloud Transactions
-      const { data: cloudTx, error: txErr } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('user_id', user.id)
+      this.setSyncState('syncing')
+
+      const [
+        { data: cloudTx, error: txErr },
+        { data: cloudBudgets, error: bErr },
+        { data: cloudSettings, error: sErr }
+      ] = await Promise.all([
+        supabase
+          .from('transactions')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('date', { ascending: false }),
+        supabase.from('budgets').select('*').eq('user_id', user.id),
+        supabase
+          .from('user_settings')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle()
+      ])
 
       if (txErr) throw txErr
-
-      // 2. Fetch Cloud Budgets
-      const { data: cloudBudgets, error: bErr } = await supabase
-        .from('budgets')
-        .select('*')
-        .eq('user_id', user.id)
-
       if (bErr) throw bErr
-
-      // 3. Fetch Cloud Settings
-      const { data: cloudSettings, error: sErr } = await supabase
-        .from('user_settings')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle()
-
       if (sErr) throw sErr
 
       // Map cloud transactions to local format
-      const mappedCloudTx: Transaction[] = (cloudTx || []).map((t: any) => ({
-        id: t.id,
-        type: t.type,
-        amount: Number(t.amount),
-        category: t.category,
-        account: t.account || 'Cash',
-        description: t.description || '',
-        date: t.date,
-        notes: t.notes || '',
-        recurring: Boolean(t.recurring),
-        createdAt: t.created_at,
-        updatedAt: t.updated_at
-      }))
+      const mappedCloudTx: Transaction[] = (cloudTx || []).map((t: any) => {
+        const decoded = decodeTransactionNotes(t.notes || '')
+        return {
+          id: t.id,
+          type: t.type,
+          amount: Number(t.amount),
+          category: t.category,
+          account: t.account || 'Cash',
+          description: t.description || '',
+          date: t.date,
+          notes: decoded.notes,
+          paidFor: decoded.paidFor,
+          myShare: decoded.myShare,
+          splits: decoded.splits,
+          repaymentFor: decoded.repaymentFor,
+          recurring: Boolean(t.recurring),
+          createdAt: t.created_at,
+          updatedAt: t.updated_at
+        }
+      })
 
       // Merge transactions with Last-Write-Wins based on updatedAt
       const txMap = new Map<string, Transaction>()
@@ -227,7 +270,7 @@ class CloudSyncService {
           account: tx.account || 'Cash',
           description: tx.description || '',
           date: tx.date,
-          notes: tx.notes || '',
+          notes: encodeTransactionNotes(tx),
           recurring: tx.recurring || false,
           created_at: tx.createdAt,
           updated_at: tx.updatedAt
@@ -382,7 +425,7 @@ class CloudSyncService {
                 account: tx.account || 'Cash',
                 description: tx.description || '',
                 date: tx.date,
-                notes: tx.notes || '',
+                notes: encodeTransactionNotes(tx),
                 recurring: tx.recurring || false,
                 created_at: tx.createdAt,
                 updated_at: tx.updatedAt
@@ -470,7 +513,7 @@ class CloudSyncService {
         account: tx.account || 'Cash',
         description: tx.description || '',
         date: tx.date,
-        notes: tx.notes || '',
+        notes: encodeTransactionNotes(tx),
         recurring: tx.recurring || false,
         created_at: tx.createdAt,
         updated_at: tx.updatedAt
