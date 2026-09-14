@@ -35,7 +35,7 @@ import {
   pageVariants, desktopModalVariants, mobileSheetVariants, backdropVariants,
   buttonTap, primaryButtonTap, reducedMotionVariants, iosSpring, sheetSpring, snapSpring,
   onboardingStepVariants, onboardingContentVariants, onboardingItemVariants,
-  wordRevealContainer, wordRevealItem, verifyVariants
+  wordRevealContainer, wordRevealItem, verifyVariants, monthChangeVariants
 } from './lib/motion'
 import { matchTransactions, calculateReconciliation, filterTransactionsForReconciliation, buildReconciliationRecord } from './services/reconciliation'
 import { parseStatement } from './services/statementParser'
@@ -1516,9 +1516,67 @@ function BudgetPage({
   )
 }
 
+function AnimatedDonut({ pct, label, sublabel }: { pct: number; label: string; sublabel: string }) {
+  // SVG-based donut — animatable via strokeDashoffset (GPU composited)
+  const R = 44
+  const circ = 2 * Math.PI * R
+  const [displayed, setDisplayed] = useState(0)
+
+  useEffect(() => {
+    // small delay so it animates on mount
+    const id = requestAnimationFrame(() => setDisplayed(Math.min(100, Math.max(0, pct))))
+    return () => cancelAnimationFrame(id)
+  }, [pct])
+
+  return (
+    <div className="donut-wrap">
+      <div style={{ position: 'relative', width: 108, height: 108, flexShrink: 0 }}>
+        <svg width="108" height="108" viewBox="0 0 108 108" style={{ transform: 'rotate(-90deg)' }}>
+          {/* Track */}
+          <circle cx="54" cy="54" r={R} fill="none" stroke="var(--surface-soft)" strokeWidth="13" />
+          {/* Fill */}
+          <motion.circle
+            cx="54" cy="54" r={R}
+            fill="none"
+            stroke={pct >= 100 ? 'var(--negative)' : pct >= 80 ? 'var(--warning)' : 'var(--accent)'}
+            strokeWidth="13"
+            strokeLinecap="round"
+            strokeDasharray={circ}
+            initial={{ strokeDashoffset: circ }}
+            animate={{ strokeDashoffset: circ - (displayed / 100) * circ }}
+            transition={{ type: 'spring', stiffness: 120, damping: 24, mass: 1.2 }}
+            style={{ willChange: 'stroke-dashoffset' }}
+          />
+        </svg>
+        <div style={{
+          position: 'absolute', inset: 0,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <motion.b
+            key={Math.round(pct)}
+            initial={{ opacity: 0, scale: 0.85 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+            style={{ fontSize: 19, lineHeight: 1 }}
+          >
+            {Math.round(pct)}%
+          </motion.b>
+          <span style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>used</span>
+        </div>
+      </div>
+      <div>
+        <strong style={{ fontSize: 15 }}>{label}</strong>
+        <p style={{ fontSize: 11, color: 'var(--muted)', margin: '2px 0 0' }}>{sublabel}</p>
+      </div>
+    </div>
+  )
+}
+
 function StatsPage({ data, setPage }: { data: FinanceData; setPage?: (p: Page, dir?: number) => void }) {
   const f = (n: number) => formatMoney(n, data.settings.currency)
   const [selected, setSelected] = useState(monthKey())
+  const [monthDir, setMonthDir] = useState(1)
+  const reduced = useReducedMotion()
 
   // Last 6 months array (oldest first)
   const months = Array.from({ length: 6 }, (_, i) => {
@@ -1528,11 +1586,9 @@ function StatsPage({ data, setPage }: { data: FinanceData; setPage?: (p: Page, d
     return monthKey(d)
   })
 
-  // Human-readable month label: "Sep 2026"
   const monthLabel = (key: string) =>
     new Date(key + '-01T12:00:00').toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
 
-  // Per-month stats — independent of startingBalance
   const monthStats = (key: string) => {
     const income = data.transactions
       .filter(t => t.type === 'income' && t.date.slice(0, 7) === key)
@@ -1553,7 +1609,6 @@ function StatsPage({ data, setPage }: { data: FinanceData; setPage?: (p: Page, d
   const budgetUsedPct = budgetForSelected > 0 ? Math.min(100, (sel.expenses / budgetForSelected) * 100) : 0
   const budgetRemaining = budgetForSelected > 0 ? Math.max(0, budgetForSelected - sel.expenses) : 0
 
-  // Category spending for selected month, sorted highest→lowest
   const cats = data.settings.categories || categories
   const spending = cats
     .map(c => ({ name: c, value: categorySpend(data.transactions, c, selected) }))
@@ -1561,9 +1616,33 @@ function StatsPage({ data, setPage }: { data: FinanceData; setPage?: (p: Page, d
     .sort((a, b) => b.value - a.value)
   const totalExpenseForPct = spending.reduce((n, x) => n + x.value, 0)
 
-  // Bar chart: max across all 6 months expenses
   const monthExpenses = months.map(m => monthStats(m).expenses)
   const barMax = Math.max(...monthExpenses, 1)
+
+  const handleMonthSelect = (m: string) => {
+    const oldIdx = months.indexOf(selected)
+    const newIdx = months.indexOf(m)
+    setMonthDir(newIdx >= oldIdx ? 1 : -1)
+    setSelected(m)
+  }
+
+  // Stagger variants
+  const gridVariants = (reduced ? undefined : {
+    initial: {},
+    animate: { transition: { staggerChildren: 0.07, delayChildren: 0.05 } },
+  }) as import('framer-motion').Variants | undefined
+  const cardVar = (reduced ? undefined : {
+    initial: { opacity: 0, y: 14, scale: 0.97 },
+    animate: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring' as const, stiffness: 380, damping: 32, mass: 0.85 } },
+  }) as import('framer-motion').Variants | undefined
+  const catRowVar = (reduced ? undefined : {
+    initial: { opacity: 0, x: -8 },
+    animate: { opacity: 1, x: 0, transition: { type: 'spring' as const, stiffness: 360, damping: 30 } },
+  }) as import('framer-motion').Variants | undefined
+  const catGridVar = (reduced ? undefined : {
+    initial: {},
+    animate: { transition: { staggerChildren: 0.05, delayChildren: 0.1 } },
+  }) as import('framer-motion').Variants | undefined
 
   return (
     <div className="stats-page">
@@ -1577,92 +1656,131 @@ function StatsPage({ data, setPage }: { data: FinanceData; setPage?: (p: Page, d
           <ThemedSelect
             ariaLabel="Select month"
             value={selected}
-            onChange={v => setSelected(v)}
+            onChange={v => handleMonthSelect(v)}
             options={months.map(m => ({ value: m, label: monthLabel(m), icon: <CalendarDays size={14} /> }))}
             compact
           />
         </div>
       </div>
 
-      <section className="stats-summary">
-        <Metric label="Income" value={f(sel.income)} detail={monthLabel(selected)} icon={<ArrowDownLeft size={18} />} tone="positive" />
-        <Metric label="Expenses" value={f(sel.expenses)} detail={monthLabel(selected)} icon={<ArrowUpRight size={18} />} tone="negative" />
-        <Metric
-          label="Net"
-          value={sel.net >= 0 ? `+${f(sel.net)}` : f(sel.net)}
-          detail="Income minus expenses"
-          icon={<WalletCards size={18} />}
-          tone={sel.net >= 0 ? 'positive' : 'negative'}
-        />
-      </section>
+      {/* Summary metrics — stagger in */}
+      <AnimatePresence mode="wait" custom={monthDir} initial={false}>
+        <motion.section
+          key={`summary-${selected}`}
+          custom={monthDir}
+          variants={reduced ? reducedMotionVariants : monthChangeVariants}
+          initial="initial"
+          animate="animate"
+          exit="exit"
+          className="stats-summary"
+          style={{ willChange: 'transform, opacity' }}
+        >
+          <Metric label="Income" value={f(sel.income)} detail={monthLabel(selected)} icon={<ArrowDownLeft size={18} />} tone="positive" />
+          <Metric label="Expenses" value={f(sel.expenses)} detail={monthLabel(selected)} icon={<ArrowUpRight size={18} />} tone="negative" />
+          <Metric
+            label="Net"
+            value={sel.net >= 0 ? `+${f(sel.net)}` : f(sel.net)}
+            detail="Income minus expenses"
+            icon={<WalletCards size={18} />}
+            tone={sel.net >= 0 ? 'positive' : 'negative'}
+          />
+        </motion.section>
+      </AnimatePresence>
 
-      <div className="chart-grid">
+      {/* Chart grid — cards stagger in on mount */}
+      <motion.div
+        className="chart-grid"
+        variants={gridVariants}
+        initial="initial"
+        animate="animate"
+      >
         {/* Income vs Expense */}
-        <section className="chart-card">
+        <motion.section className="chart-card" variants={cardVar}>
           <div className="chart-head">
             <div>
               <p className="eyebrow">Income vs expense</p>
-              <h2>{monthLabel(selected)}</h2>
+              <AnimatePresence mode="wait" custom={monthDir} initial={false}>
+                <motion.h2
+                  key={`head-income-${selected}`}
+                  custom={monthDir}
+                  variants={reduced ? reducedMotionVariants : monthChangeVariants}
+                  initial="initial" animate="animate" exit="exit"
+                >
+                  {monthLabel(selected)}
+                </motion.h2>
+              </AnimatePresence>
             </div>
             <BarChart3 size={20} />
           </div>
-          <div className="compare-bars">
-            <Bar label="Income" value={sel.income} max={Math.max(sel.income, sel.expenses, 1)} tone="positive" />
-            <Bar label="Expenses" value={sel.expenses} max={Math.max(sel.income, sel.expenses, 1)} tone="negative" />
-            <div className="compare-row" style={{ marginTop: 4, opacity: 0.75 }}>
-              <span>Net</span>
-              <div className="compare-track" style={{ background: 'transparent' }} />
-              <b style={{ color: sel.net >= 0 ? 'var(--positive)' : 'var(--negative)' }}>
-                {sel.net >= 0 ? '+' : ''}{f(sel.net)}
-              </b>
-            </div>
-          </div>
-        </section>
+          <AnimatePresence mode="wait" custom={monthDir} initial={false}>
+            <motion.div
+              key={`bars-${selected}`}
+              custom={monthDir}
+              variants={reduced ? reducedMotionVariants : monthChangeVariants}
+              initial="initial" animate="animate" exit="exit"
+              className="compare-bars"
+              style={{ willChange: 'transform, opacity' }}
+            >
+              <Bar label="Income" value={sel.income} max={Math.max(sel.income, sel.expenses, 1)} tone="positive" />
+              <Bar label="Expenses" value={sel.expenses} max={Math.max(sel.income, sel.expenses, 1)} tone="negative" />
+              <div className="compare-row" style={{ marginTop: 4, opacity: 0.75 }}>
+                <span>Net</span>
+                <div className="compare-track" style={{ background: 'transparent' }} />
+                <b style={{ color: sel.net >= 0 ? 'var(--positive)' : 'var(--negative)' }}>
+                  {sel.net >= 0 ? '+' : ''}{f(sel.net)}
+                </b>
+              </div>
+            </motion.div>
+          </AnimatePresence>
+        </motion.section>
 
-        {/* Budget utilization — uses selected month's expenses */}
-        <section className="chart-card">
+        {/* Budget utilization — animated SVG donut */}
+        <motion.section className="chart-card" variants={cardVar}>
           <div className="chart-head">
             <div>
               <p className="eyebrow">Budget utilization</p>
-              <h2>{monthLabel(selected)}</h2>
+              <AnimatePresence mode="wait" custom={monthDir} initial={false}>
+                <motion.h2
+                  key={`head-budget-${selected}`}
+                  custom={monthDir}
+                  variants={reduced ? reducedMotionVariants : monthChangeVariants}
+                  initial="initial" animate="animate" exit="exit"
+                >
+                  {monthLabel(selected)}
+                </motion.h2>
+              </AnimatePresence>
             </div>
             <PieChart size={20} />
           </div>
           {budgetForSelected > 0 ? (
-            <div className="donut-wrap">
-              <div
-                className="donut"
-                style={{ '--percent': `${budgetUsedPct}%` } as React.CSSProperties}
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={`donut-${selected}`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1, transition: { duration: 0.2 } }}
+                exit={{ opacity: 0, transition: { duration: 0.12 } }}
               >
-                <div>
-                  <b>{Math.round(budgetUsedPct)}%</b>
-                  <span>used</span>
-                </div>
-              </div>
-              <div>
-                <strong>{f(budgetRemaining)}</strong>
-                <p>still available of {f(budgetForSelected)}</p>
-              </div>
-            </div>
+                <AnimatedDonut
+                  pct={budgetUsedPct}
+                  label={f(budgetRemaining)}
+                  sublabel={`still available of ${f(budgetForSelected)}`}
+                />
+              </motion.div>
+            </AnimatePresence>
           ) : (
             <div className="chart-empty">
               <p style={{ margin: 0, fontSize: 13 }}>Set a monthly budget in the Budget tab to track progress.</p>
               {setPage && (
-                <button
-                  type="button"
-                  className="text-button"
-                  onClick={() => setPage('budget', 1)}
-                  style={{ marginTop: 8 }}
-                >
+                <button type="button" className="text-button" onClick={() => setPage('budget', 1)} style={{ marginTop: 8 }}>
                   Go to Budget <ChevronRight size={14} />
                 </button>
               )}
             </div>
           )}
-        </section>
+        </motion.section>
 
-        {/* Last 6 months bar chart */}
-        <section className="chart-card wide">
+        {/* Last 6 months — clickable bar chart */}
+        <motion.section className="chart-card wide" variants={cardVar}>
           <div className="chart-head">
             <div>
               <p className="eyebrow">Spending pattern</p>
@@ -1676,10 +1794,13 @@ function StatsPage({ data, setPage }: { data: FinanceData; setPage?: (p: Page, d
               const heightPct = ms.hasData ? ms.expenses / barMax * 100 : 0
               const isSelected = m === selected
               return (
-                <div
+                <motion.div
                   key={m}
-                  style={{ cursor: 'pointer', opacity: isSelected ? 1 : 0.75 }}
-                  onClick={() => setSelected(m)}
+                  style={{ cursor: 'pointer', opacity: isSelected ? 1 : 0.72 }}
+                  animate={{ opacity: isSelected ? 1 : 0.72 }}
+                  transition={{ duration: 0.18 }}
+                  whileTap={{ scale: 0.94, transition: { type: 'spring', stiffness: 500, damping: 30 } }}
+                  onClick={() => handleMonthSelect(m)}
                   title={ms.hasData ? `${monthLabel(m)}: ${f(ms.expenses)}` : `${monthLabel(m)}: No data`}
                 >
                   <div
@@ -1690,64 +1811,92 @@ function StatsPage({ data, setPage }: { data: FinanceData; setPage?: (p: Page, d
                       <motion.span
                         initial={{ height: 0 }}
                         animate={{ height: `${heightPct}%` }}
-                        transition={{ duration: 0.5, ease: [0.34, 1.04, 0.64, 1] }}
-                        style={isSelected ? { background: 'var(--accent)' } : {}}
+                        transition={{ type: 'spring', stiffness: 160, damping: 26, mass: 1.1 }}
+                        style={isSelected ? { background: 'var(--accent)', willChange: 'height' } : { willChange: 'height' }}
                       />
                     ) : null}
                   </div>
                   <small style={isSelected ? { color: 'var(--accent)', fontWeight: 700 } : {}}>
                     {new Date(m + '-01T12:00:00').toLocaleDateString(undefined, { month: 'short' })}
                   </small>
-                </div>
+                </motion.div>
               )
             })}
           </div>
-        </section>
+        </motion.section>
 
-        {/* Category spending */}
-        <section className="chart-card wide">
+        {/* Category spending — staggered rows */}
+        <motion.section className="chart-card wide" variants={cardVar}>
           <div className="chart-head">
             <div>
               <p className="eyebrow">Where it went</p>
               <h2>Category spending</h2>
             </div>
           </div>
-          {spending.length > 0 ? (
-            <div className="category-chart">
-              {spending.map((x, i) => {
-                const pct = totalExpenseForPct > 0 ? (x.value / totalExpenseForPct * 100).toFixed(1) : '0'
-                return (
-                  <div key={x.name}>
-                    <div>
-                      <span>
-                        <i style={{ background: `var(--chart-${i % 5})` }} />
-                        {x.name}
-                      </span>
-                      <b>
-                        {f(x.value)}
-                        {totalExpenseForPct > 0 && (
-                          <span style={{ fontWeight: 400, color: 'var(--muted)', marginLeft: 5, fontSize: 11 }}>
-                            · {pct}%
-                          </span>
-                        )}
-                      </b>
-                    </div>
-                    <Progress value={x.value / Math.max(...spending.map(s => s.value)) * 100} state="normal" />
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="chart-empty">
-              {sel.hasData ? 'No expense categories found for this month.' : 'No transactions in this month.'}
-            </div>
-          )}
-        </section>
-      </div>
+          <AnimatePresence mode="wait" initial={false}>
+            {spending.length > 0 ? (
+              <motion.div
+                key={`cat-${selected}`}
+                variants={catGridVar}
+                initial="initial"
+                animate="animate"
+                exit={{ opacity: 0, transition: { duration: 0.1 } }}
+                className="category-chart"
+              >
+                {spending.map((x, i) => {
+                  const pct = totalExpenseForPct > 0 ? (x.value / totalExpenseForPct * 100).toFixed(1) : '0'
+                  const barPct = x.value / Math.max(...spending.map(s => s.value)) * 100
+                  return (
+                    <motion.div key={x.name} variants={catRowVar}>
+                      <div>
+                        <span>
+                          <i style={{ background: `var(--chart-${i % 5})` }} />
+                          {x.name}
+                        </span>
+                        <b>
+                          {f(x.value)}
+                          {totalExpenseForPct > 0 && (
+                            <span style={{ fontWeight: 400, color: 'var(--muted)', marginLeft: 5, fontSize: 11 }}>
+                              · {pct}%
+                            </span>
+                          )}
+                        </b>
+                      </div>
+                      {/* Animated category bar */}
+                      <div className="progress" style={{ height: 6, marginTop: 2 }}>
+                        <motion.span
+                          className="progress-fill normal"
+                          style={{
+                            background: `var(--chart-${i % 5})`,
+                            willChange: 'width',
+                          }}
+                          initial={{ width: 0 }}
+                          animate={{ width: `${barPct}%` }}
+                          transition={{ type: 'spring', stiffness: 160, damping: 26, mass: 1.1, delay: i * 0.04 }}
+                        />
+                      </div>
+                    </motion.div>
+                  )
+                })}
+              </motion.div>
+            ) : (
+              <motion.div
+                key="cat-empty"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1, transition: { duration: 0.2 } }}
+                exit={{ opacity: 0, transition: { duration: 0.1 } }}
+                className="chart-empty"
+              >
+                {sel.hasData ? 'No expense categories found for this month.' : 'No transactions in this month.'}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.section>
+      </motion.div>
     </div>
   )
 }
-function Bar({label,value,max,tone}:{label:string;value:number;max:number;tone:string}){return <div className="compare-row"><span>{label}</span><div className="compare-track"><motion.i className={tone} initial={{width:0}} animate={{width:`${value/max*100}%`}}/></div><b>{value?formatMoney(value):'—'}</b></div>}
+function Bar({label,value,max,tone}:{label:string;value:number;max:number;tone:string}){return <div className="compare-row"><span>{label}</span><div className="compare-track"><motion.i className={tone} initial={{width:0}} animate={{width:`${value/max*100}%`}} transition={{ type:'spring', stiffness:160, damping:26, mass:1.1 }} style={{willChange:'width'}}/></div><b>{value?formatMoney(value):'—'}</b></div>}
 
 function ConfigPage({
   data,

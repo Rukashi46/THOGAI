@@ -357,3 +357,82 @@ export const verifyVariants: Variants = {
     transition: snapSpring,
   },
 }
+
+// ─── Stats Screen Animations ──────────────────────────────────────────────────
+
+/** Individual stat card entrance (stagger parent must set delayChildren) */
+export const statCardVariants: Variants = {
+  initial: { opacity: 0, y: 14, scale: 0.97 },
+  animate: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { type: 'spring', stiffness: 380, damping: 32, mass: 0.85 },
+  },
+}
+
+/** Stagger container for chart cards */
+export const statGridVariants: Variants = {
+  initial: {},
+  animate: {
+    transition: { staggerChildren: 0.07, delayChildren: 0.05 },
+  },
+}
+
+/** Chart bar fill — spring physics */
+export const barFillSpring: Transition = {
+  type: 'spring',
+  stiffness: 160,
+  damping: 26,
+  mass: 1.1,
+}
+
+/** Donut ring fill transition */
+export const donutSpring: Transition = {
+  type: 'spring',
+  stiffness: 120,
+  damping: 24,
+  mass: 1.2,
+}
+
+/** Month selector change — content cross-fades with micro-slide */
+export const monthChangeVariants: Variants = {
+  initial: (dir: number) => ({ opacity: 0, x: dir > 0 ? 12 : -12 }),
+  animate: {
+    opacity: 1,
+    x: 0,
+    transition: { type: 'spring', stiffness: 420, damping: 34, mass: 0.75 },
+  },
+  exit: (dir: number) => ({
+    opacity: 0,
+    x: dir > 0 ? -8 : 8,
+    transition: { duration: 0.13, ease: [0.4, 0, 0.6, 1] },
+  }),
+}
+
+/** Category row entrance (stagger) */
+export const categoryRowVariants: Variants = {
+  initial: { opacity: 0, x: -8 },
+  animate: {
+    opacity: 1,
+    x: 0,
+    transition: { type: 'spring', stiffness: 360, damping: 30 },
+  },
+}
+
+/** Toast notification */
+export const toastVariants: Variants = {
+  initial: { opacity: 0, y: 16, scale: 0.94 },
+  animate: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { ...snapSpring, opacity: { duration: 0.12, ease: 'easeOut' } },
+  },
+  exit: {
+    opacity: 0,
+    y: 10,
+    scale: 0.96,
+    transition: { duration: 0.16, ease: [0.4, 0, 0.6, 1] },
+  },
+}
