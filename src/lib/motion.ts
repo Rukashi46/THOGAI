@@ -436,3 +436,84 @@ export const toastVariants: Variants = {
     transition: { duration: 0.16, ease: [0.4, 0, 0.6, 1] },
   },
 }
+
+// ─── Lock Screen / PIN ────────────────────────────────────────────────────────
+
+/** Lock screen entrance */
+export const lockScreenVariants: Variants = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1, transition: { duration: 0.22, ease: [0.25, 0.46, 0.45, 0.94] } },
+  exit:    { opacity: 0, transition: { duration: 0.16, ease: [0.4, 0, 0.6, 1] } },
+}
+
+/** PIN dot fill — spring pop */
+export const pinDotVariants: Variants = {
+  empty: { scale: 1, background: 'transparent' },
+  filled: {
+    scale: [1, 1.3, 1],
+    transition: { type: 'spring', stiffness: 600, damping: 18, mass: 0.5 },
+  },
+}
+
+// ─── Sync Pill ────────────────────────────────────────────────────────────────
+
+/** Sync pill label cross-fade */
+export const syncLabelVariants: Variants = {
+  initial: { opacity: 0, y: 4 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.14, ease: [0.25, 0.46, 0.45, 0.94] } },
+  exit:    { opacity: 0, y: -4, transition: { duration: 0.1, ease: [0.4, 0, 0.6, 1] } },
+}
+
+// ─── Balance / Number Reveal ──────────────────────────────────────────────────
+
+/** Animated balance value — cross-fades on change */
+export const balanceRevealVariants: Variants = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0, transition: { ...iosSpring, opacity: { duration: 0.16 } } },
+  exit:    { opacity: 0, y: -6, transition: { duration: 0.12, ease: [0.4, 0, 0.6, 1] } },
+}
+
+// ─── Home Page Content Stagger ────────────────────────────────────────────────
+
+/** Container for staggered home sections */
+export const homeSectionContainer: Variants = {
+  animate: { transition: { staggerChildren: 0.07, delayChildren: 0.05 } },
+}
+
+/** Individual home section */
+export const homeSectionItem: Variants = {
+  initial: { opacity: 0, y: 12 },
+  animate: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 380, damping: 32 } },
+}
+
+// ─── Budget Item ──────────────────────────────────────────────────────────────
+
+/** Budget list item entrance */
+export const budgetItemVariants: Variants = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 380, damping: 32 } },
+}
+
+// ─── Split Panel ──────────────────────────────────────────────────────────────
+
+/** Expandable split section — uses layout animation */
+export const splitPanelVariants: Variants = {
+  initial: { opacity: 0, scaleY: 0.92 },
+  animate: { opacity: 1, scaleY: 1, transition: { ...sheetSpring, opacity: { duration: 0.14 } } },
+  exit:    { opacity: 0, scaleY: 0.94, transition: { duration: 0.15, ease: [0.4, 0, 0.6, 1] } },
+}
+
+// ─── Confirm Dialog ───────────────────────────────────────────────────────────
+
+/** Confirm modal pop */
+export const confirmVariants: Variants = {
+  initial: { opacity: 0, scale: 0.93, y: 12 },
+  animate: {
+    opacity: 1, scale: 1, y: 0,
+    transition: { ...snapSpring, opacity: { duration: 0.14 } },
+  },
+  exit: {
+    opacity: 0, scale: 0.95, y: 6,
+    transition: { duration: 0.15, ease: [0.4, 0, 0.6, 1] },
+  },
+}

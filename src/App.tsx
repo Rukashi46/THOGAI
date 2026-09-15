@@ -35,7 +35,10 @@ import {
   pageVariants, desktopModalVariants, mobileSheetVariants, backdropVariants,
   buttonTap, primaryButtonTap, reducedMotionVariants, iosSpring, sheetSpring, snapSpring,
   onboardingStepVariants, onboardingContentVariants, onboardingItemVariants,
-  wordRevealContainer, wordRevealItem, verifyVariants, monthChangeVariants
+  wordRevealContainer, wordRevealItem, verifyVariants, monthChangeVariants,
+  lockScreenVariants, pinDotVariants, syncLabelVariants, balanceRevealVariants,
+  homeSectionContainer, homeSectionItem, budgetItemVariants, confirmVariants,
+  splitPanelVariants, messageVariants, listItemVariants, listContainerVariants
 } from './lib/motion'
 import { matchTransactions, calculateReconciliation, filterTransactionsForReconciliation, buildReconciliationRecord } from './services/reconciliation'
 import { parseStatement } from './services/statementParser'
@@ -293,9 +296,18 @@ function SyncPill({ state, onClick, lastSynced }: { state: SyncState; onClick: (
       disabled={state === 'syncing'}
       title={`Sync status: ${label}${timeStr}. Tap to sync.`}
       aria-label={`Sync status: ${label}`}
+      style={{ overflow: 'hidden', position: 'relative' }}
     >
       {icon}
-      <span>{label}</span>
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.span
+          key={label}
+          variants={syncLabelVariants}
+          initial="initial"
+          animate="animate"
+          exit="exit"
+        >{label}</motion.span>
+      </AnimatePresence>
     </button>
   )
 }
@@ -760,6 +772,7 @@ function App() {
             animate="animate"
             exit="exit"
             className="page"
+            style={{ willChange: 'transform, opacity' }}
           >
             {page === 'home' && (
               <HomePage
@@ -1018,8 +1031,8 @@ function App() {
   )
 }
 
-function HomePage({data,snapshot:s,setPage,open,openAi,setSettings}:{data:FinanceData;snapshot:ReturnType<typeof snapshot>;setPage:(p:Page,dir?:number)=>void;open:(t?:TransactionType,c?:string)=>void;openAi:()=>void;setSettings:(p:Partial<Settings>)=>void}) { const h=new Date().getHours(); const greeting=h<12?'Good morning':h<18?'Good afternoon':'Good evening'; const f=(n:number)=>formatMoney(n,data.settings.currency); const has=data.transactions.length>0||data.settings.monthlyBudget>0||data.budgets.length>0; const recent=[...data.transactions].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,4); const state=budgetState(s.expenses,s.budget); const insight=s.budget? s.expenses>s.budget?'Your spending is over your monthly budget.':s.budgetRemaining>0?`You have ${f(s.budgetRemaining)} left in this month’s budget.`:'You have reached this month’s budget.':s.expenses?'Every expense is now part of your financial picture.':'Add your first transaction to see an honest overview.'; return <>{!has?<Empty onAction={(x)=>x==='budget'?setPage('budget',1):open(x)}/>:<div className="home-layout"><section className="hero-area"><div className="greeting"><p>{greeting}{data.settings.name?`, ${data.settings.name}`:''}</p><h1>Let’s make today count.</h1></div><div className="insight insight-clickable" onClick={openAi} role="button" tabIndex={0} title="Tap to ask THOGAI AI"><div className="insight-icon"><TrendingUp size={18}/></div><p>{insight}</p><span className="ai-badge"><Sparkles size={11}/> Ask AI</span></div><motion.section className="balance-card" initial={{opacity:0,scale:.98}} animate={{opacity:1,scale:1}}><div className="balance-top"><span>Remaining balance</span><IconButton label={data.settings.hideBalance?'Show balance':'Hide balance'} onClick={()=>setSettings({hideBalance:!data.settings.hideBalance})}>{data.settings.hideBalance?<EyeOff size={18}/>:<Eye size={18}/>}</IconButton></div><h2>{data.settings.hideBalance?'••••••':f(s.balance)}</h2><div className="balance-foot"><span><span className="dot"></span>Available this month</span><span>{s.income?`${Math.round((s.balance/s.income)*100)}% retained`:''}</span></div></motion.section></section><section className="summary-grid"><Metric label="Income" value={f(s.income)} detail="Money in" icon={<ArrowDownLeft size={18}/>} tone="positive"/><Metric label="Expenses" value={f(s.expenses)} detail="Money spent" icon={<ArrowUpRight size={18}/>} tone="negative"/><Metric label="Previous dues" value={f(s.dues)} detail="Separate from expenses" icon={<Landmark size={18}/>} tone="neutral"/><Metric label="Paid out" value={f(s.paidOut)} detail="Expenses + dues" icon={<CircleDollarSign size={18}/>} tone="neutral"/></section><section className="section-block budget-overview"><div className="section-title"><div><p className="eyebrow">Monthly plan</p><h2>Budget overview</h2></div><button className="text-button" onClick={()=>setPage('budget',1)}>Manage <ChevronRight size={15}/></button></div>{s.budget?<><div className="budget-main"><div><strong>{f(s.expenses)} <span>of {f(s.budget)}</span></strong><p>{f(s.budgetRemaining)} remaining</p></div><b className={`percentage ${state}`}>{Math.round(s.budgetUsed)}% used</b></div><Progress value={s.budgetUsed} state={state}/></>:<div className="inline-empty"><p>Give every rupee a job with a monthly budget.</p><button className="button compact" onClick={()=>setPage('budget',1)}>Set budget</button></div>}</section><section className="section-block"><div className="section-title"><div><p className="eyebrow">Spend smarter</p><h2>Quick expense</h2></div><span className="muted">One tap to start</span></div><div className="quick-grid">{['Food & Dining','Groceries','Transport','Fuel','Snacks'].map(c=>{const I=categoryIcons[c]??ReceiptText;return <button key={c} onClick={()=>open('expense',c)}><span><I size={20}/></span>{c}</button>})}</div></section><section className="section-block recent"><div className="section-title"><div><p className="eyebrow">Your activity</p><h2>Recent transactions</h2></div><button className="text-button" onClick={()=>setPage('ledger',1)}>See all <ChevronRight size={15}/></button></div>{recent.length?<div className="transactions mini">{recent.map(t=><TransactionRow key={t.id} tx={t} currency={data.settings.currency}/>)}</div>:<p className="muted pad">No transactions yet.</p>}</section></div>}</> }
-function Metric({label,value,detail,icon,tone}:{label:string;value:string;detail:string;icon:React.ReactNode;tone:string}) {return <div className="metric"><span className={`metric-icon ${tone}`}>{icon}</span><div><p>{label}</p><strong>{value}</strong><small>{detail}</small></div></div>}
+function HomePage({data,snapshot:s,setPage,open,openAi,setSettings}:{data:FinanceData;snapshot:ReturnType<typeof snapshot>;setPage:(p:Page,dir?:number)=>void;open:(t?:TransactionType,c?:string)=>void;openAi:()=>void;setSettings:(p:Partial<Settings>)=>void}) { const h=new Date().getHours(); const greeting=h<12?'Good morning':h<18?'Good afternoon':'Good evening'; const f=(n:number)=>formatMoney(n,data.settings.currency); const has=data.transactions.length>0||data.settings.monthlyBudget>0||data.budgets.length>0; const recent=[...data.transactions].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,4); const state=budgetState(s.expenses,s.budget); const insight=s.budget? s.expenses>s.budget?'Your spending is over your monthly budget.':s.budgetRemaining>0?`You have ${f(s.budgetRemaining)} left in this month’s budget.`:'You have reached this month’s budget.':s.expenses?'Every expense is now part of your financial picture.':'Add your first transaction to see an honest overview.'; return <>{!has?<Empty onAction={(x)=>x==='budget'?setPage('budget',1):open(x)}/>:<div className="home-layout"><section className="hero-area"><div className="greeting"><p>{greeting}{data.settings.name?`, ${data.settings.name}`:''}</p><h1>Let’s make today count.</h1></div><div className="insight insight-clickable" onClick={openAi} role="button" tabIndex={0} title="Tap to ask THOGAI AI"><div className="insight-icon"><TrendingUp size={18}/></div><p>{insight}</p><span className="ai-badge"><Sparkles size={11}/> Ask AI</span></div><motion.section className="balance-card" initial={{opacity:0,scale:.98,y:8}} animate={{opacity:1,scale:1,y:0}} transition={iosSpring}><div className="balance-top"><span>Remaining balance</span><IconButton label={data.settings.hideBalance?'Show balance':'Hide balance'} onClick={()=>setSettings({hideBalance:!data.settings.hideBalance})}>{data.settings.hideBalance?<EyeOff size={18}/>:<Eye size={18}/>}</IconButton></div><h2>{data.settings.hideBalance?'••••••':f(s.balance)}</h2><div className="balance-foot"><span><span className="dot"></span>Available this month</span><span>{s.income?`${Math.round((s.balance/s.income)*100)}% retained`:''}</span></div></motion.section></section><motion.section className="summary-grid" variants={homeSectionContainer} initial="initial" animate="animate"><Metric label="Income" value={f(s.income)} detail="Money in" icon={<ArrowDownLeft size={18}/>} tone="positive"/><Metric label="Expenses" value={f(s.expenses)} detail="Money spent" icon={<ArrowUpRight size={18}/>} tone="negative"/><Metric label="Previous dues" value={f(s.dues)} detail="Separate from expenses" icon={<Landmark size={18}/>} tone="neutral"/><Metric label="Paid out" value={f(s.paidOut)} detail="Expenses + dues" icon={<CircleDollarSign size={18}/>} tone="neutral"/></motion.section><section className="section-block budget-overview"><div className="section-title"><div><p className="eyebrow">Monthly plan</p><h2>Budget overview</h2></div><button className="text-button" onClick={()=>setPage('budget',1)}>Manage <ChevronRight size={15}/></button></div>{s.budget?<><div className="budget-main"><div><strong>{f(s.expenses)} <span>of {f(s.budget)}</span></strong><p>{f(s.budgetRemaining)} remaining</p></div><b className={`percentage ${state}`}>{Math.round(s.budgetUsed)}% used</b></div><Progress value={s.budgetUsed} state={state}/></>:<div className="inline-empty"><p>Give every rupee a job with a monthly budget.</p><button className="button compact" onClick={()=>setPage('budget',1)}>Set budget</button></div>}</section><section className="section-block"><div className="section-title"><div><p className="eyebrow">Spend smarter</p><h2>Quick expense</h2></div><span className="muted">One tap to start</span></div><div className="quick-grid">{['Food & Dining','Groceries','Transport','Fuel','Snacks'].map(c=>{const I=categoryIcons[c]??ReceiptText;return <button key={c} onClick={()=>open('expense',c)}><span><I size={20}/></span>{c}</button>})}</div></section><section className="section-block recent"><div className="section-title"><div><p className="eyebrow">Your activity</p><h2>Recent transactions</h2></div><button className="text-button" onClick={()=>setPage('ledger',1)}>See all <ChevronRight size={15}/></button></div>{recent.length?<motion.div className="transactions mini" variants={listContainerVariants} initial="initial" animate="animate">{recent.map(t=><TransactionRow key={t.id} tx={t} currency={data.settings.currency}/>)}</motion.div>:<p className="muted pad">No transactions yet.</p>}</section></div>}</> }
+function Metric({label,value,detail,icon,tone}:{label:string;value:string;detail:string;icon:React.ReactNode;tone:string}) {return <motion.div className="metric" variants={homeSectionItem}><span className={`metric-icon ${tone}`}>{icon}</span><div><p>{label}</p><strong>{value}</strong><small>{detail}</small></div></motion.div>}
 
 function Ledger({
   transactions,
@@ -1244,7 +1257,12 @@ function Ledger({
           {Object.entries(groups).map(([date, items]) => (
             <section key={date}>
               <h3>{labelDate(date)}</h3>
-              <div className="transactions">
+              <motion.div
+                className="transactions"
+                variants={listContainerVariants}
+                initial="initial"
+                animate="animate"
+              >
                 {items.map((t) => (
                   <TransactionRow
                     key={t.id}
@@ -1275,7 +1293,7 @@ function Ledger({
                     }
                   />
                 ))}
-              </div>
+              </motion.div>
             </section>
           ))}
         </div>
@@ -1306,12 +1324,14 @@ function TransactionRow({
   const isRepayment = tx.type === 'income' && tx.category === 'Friend Repayment'
 
   return (
-    <article
+    <motion.article
       className="transaction"
       onClick={onClick}
       style={{ cursor: onClick ? 'pointer' : undefined }}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
+      variants={listItemVariants}
+      whileTap={onClick ? { scale: 0.988, transition: { type: 'spring', stiffness: 500, damping: 32 } } : undefined}
     >
       <span className={`transaction-icon ${tx.type}`}>
         <I size={18} />
@@ -1346,7 +1366,7 @@ function TransactionRow({
           {actions}
         </div>
       )}
-    </article>
+    </motion.article>
   )
 }
 
@@ -1449,14 +1469,19 @@ function BudgetPage({
           )}
         </div>
         {budgets.length ? (
-          <div className="budget-list">
+          <motion.div
+            className="budget-list"
+            variants={listContainerVariants}
+            initial="initial"
+            animate="animate"
+          >
             {budgets.map((b) => {
               const spent = categorySpend(data.transactions, b.category)
               const pct = b.limit ? (spent / b.limit) * 100 : 0
               const state = budgetState(spent, b.limit)
               const I = categoryIcons[b.category] ?? ReceiptText
               return (
-                <article className="budget-item" key={b.id}>
+                <motion.article className="budget-item" key={b.id} variants={budgetItemVariants}>
                   <span className="budget-icon">
                     <I size={18} />
                   </span>
@@ -1485,10 +1510,10 @@ function BudgetPage({
                       <Trash2 size={16} />
                     </IconButton>
                   </div>
-                </article>
+                </motion.article>
               )
             })}
-          </div>
+          </motion.div>
         ) : (
           <div className="inline-empty tall">
             <WalletCards size={24} />
@@ -2406,10 +2431,11 @@ function TransactionModal({
     <Modal close={close} title={initial ? 'Edit transaction' : 'Add transaction'}>
       <div className="type-tabs">
         {(['income', 'expense', 'due'] as TransactionType[]).map((t) => (
-          <button
+          <motion.button
             key={t}
             className={form.type === t ? 'active' : ''}
             onClick={() => handleTypeChange(t)}
+            whileTap={{ scale: 0.95, transition: { type: 'spring', stiffness: 600, damping: 24 } }}
           >
             {t === 'income' ? (
               <ArrowDownLeft size={16} />
@@ -2419,7 +2445,7 @@ function TransactionModal({
               <Landmark size={16} />
             )}{' '}
             {t}
-          </button>
+          </motion.button>
         ))}
       </div>
 
@@ -2474,9 +2500,11 @@ function TransactionModal({
       {form.type === 'expense' && paidFor === 'others' && (
         <motion.div
           className="split-builder-section"
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          exit={{ opacity: 0, height: 0 }}
+          variants={splitPanelVariants}
+          initial="initial"
+          animate="animate"
+          exit="exit"
+          style={{ transformOrigin: 'top center', overflow: 'hidden' }}
         >
           <div className="split-builder-header">
             <strong>Split breakdown</strong>
@@ -2772,14 +2800,14 @@ function LockScreen({settings,onUnlock}:{settings:Settings;onUnlock:()=>void}) {
  useEffect(()=>{if(settings.biometricLock)triggerBiometrics()},[]);
  const press=(num:string)=>{if(pin.length>=4)return;const next=pin+num;setPin(next);setError('');if(next.length===4){if(!settings.appLockPin||security.verifyPin(next,settings.appLockPin)){setTimeout(()=>onUnlock(),120)}else{setShake(true);setError('Incorrect PIN');setTimeout(()=>{setShake(false);setPin('')},500)}}};
  const backspace=()=>{setPin(p=>p.slice(0,-1));setError('')};
- return <motion.div className="lock-screen" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}><div className={`lock-box ${shake?'shake':''}`}><div className="lock-shield"><LockKeyhole size={28}/></div><h1 className="lock-title">THOGAI Locked</h1><p className="lock-subtitle">{settings.biometricLock?'Enter PIN or verify biometrics':'Enter 4-digit PIN to continue'}</p><div className="pin-dots">{[0,1,2,3].map(i=><div key={i} className={`pin-dot ${i<pin.length?'filled':''}`}/>)}</div>{error&&<p className="form-error" style={{marginBottom:16}}>{error}</p>}<div className="keypad">{['1','2','3','4','5','6','7','8','9'].map(k=><button key={k} type="button" className="key-btn" onClick={()=>press(k)}>{k}</button>)}{settings.biometricLock?<button type="button" className="key-btn action" onClick={triggerBiometrics} title="Unlock with biometrics" disabled={checkingBio}><Fingerprint size={26}/></button>:<button type="button" className="key-btn action" onClick={()=>setPin('')}>Clear</button>}<button type="button" className="key-btn" onClick={()=>press('0')}>0</button><button type="button" className="key-btn action" onClick={backspace} title="Backspace"><Delete size={20}/></button></div></div></motion.div>
+ return <motion.div className="lock-screen" variants={lockScreenVariants} initial="initial" animate="animate" exit="exit"><div className={`lock-box ${shake?'shake':''}`}><div className="lock-shield"><LockKeyhole size={28}/></div><h1 className="lock-title">THOGAI Locked</h1><p className="lock-subtitle">{settings.biometricLock?'Enter PIN or verify biometrics':'Enter 4-digit PIN to continue'}</p><div className="pin-dots">{[0,1,2,3].map(i=><motion.div key={i} className={`pin-dot ${i<pin.length?'filled':''}`} animate={i<pin.length?{scale:[1,1.3,1],transition:{type:'spring',stiffness:600,damping:18,mass:0.5}}:{scale:1}} style={{willChange:'transform'}}/>)}</div>{error&&<p className="form-error" style={{marginBottom:16}}>{error}</p>}<div className="keypad">{['1','2','3','4','5','6','7','8','9'].map(k=><motion.button key={k} type="button" className="key-btn" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={()=>press(k)}>{k}</motion.button>)}{settings.biometricLock?<motion.button type="button" className="key-btn action" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={triggerBiometrics} title="Unlock with biometrics" disabled={checkingBio}><Fingerprint size={26}/></motion.button>:<motion.button type="button" className="key-btn action" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={()=>setPin('')}>Clear</motion.button>}<motion.button type="button" className="key-btn" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={()=>press('0')}>0</motion.button><motion.button type="button" className="key-btn action" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={backspace} title="Backspace"><Delete size={20}/></motion.button></div></div></motion.div>
 }
 
 function PinSetupModal({close,onSave}:{close:()=>void;onSave:(pin:string)=>void}) {
  const [step,setStep]=useState<'create'|'confirm'>('create'); const [pin,setPin]=useState(''); const [firstPin,setFirstPin]=useState(''); const [error,setError]=useState(''); const [shake,setShake]=useState(false);
  const press=(num:string)=>{if(pin.length>=4)return;const next=pin+num;setPin(next);setError('');if(next.length===4){if(step==='create'){setTimeout(()=>{setFirstPin(next);setPin('');setStep('confirm')},180)}else{if(next===firstPin){setTimeout(()=>onSave(next),180)}else{setShake(true);setError('PINs did not match. Try again.');setTimeout(()=>{setShake(false);setPin('');setFirstPin('');setStep('create')},600)}}}};
  const backspace=()=>{setPin(p=>p.slice(0,-1));setError('')};
- return <Modal close={close} title={step==='create'?'Set 4-digit PIN':'Confirm 4-digit PIN'}><div className={`lock-box ${shake?'shake':''}`} style={{margin:'8px auto'}}><p className="modal-intro" style={{textAlign:'center',marginBottom:18}}>{step==='create'?'Choose a 4-digit PIN to secure your financial records.':'Re-enter the same 4-digit PIN to confirm.'}</p><div className="pin-dots">{[0,1,2,3].map(i=><div key={i} className={`pin-dot ${i<pin.length?'filled':''}`}/>)}</div>{error&&<p className="form-error" style={{marginBottom:14}}>{error}</p>}<div className="keypad">{['1','2','3','4','5','6','7','8','9'].map(k=><button key={k} type="button" className="key-btn" onClick={()=>press(k)}>{k}</button>)}<button type="button" className="key-btn action" onClick={()=>setPin('')}>Clear</button><button type="button" className="key-btn" onClick={()=>press('0')}>0</button><button type="button" className="key-btn action" onClick={backspace} title="Backspace"><Delete size={20}/></button></div></div></Modal>
+ return <Modal close={close} title={step==='create'?'Set 4-digit PIN':'Confirm 4-digit PIN'}><div className={`lock-box ${shake?'shake':''}`} style={{margin:'8px auto'}}><p className="modal-intro" style={{textAlign:'center',marginBottom:18}}>{step==='create'?'Choose a 4-digit PIN to secure your financial records.':'Re-enter the same 4-digit PIN to confirm.'}</p><div className="pin-dots">{[0,1,2,3].map(i=><motion.div key={i} className={`pin-dot ${i<pin.length?'filled':''}`} animate={i<pin.length?{scale:[1,1.3,1],transition:{type:'spring',stiffness:600,damping:18,mass:0.5}}:{scale:1}} style={{willChange:'transform'}}/>)}</div>{error&&<p className="form-error" style={{marginBottom:14}}>{error}</p>}<div className="keypad">{['1','2','3','4','5','6','7','8','9'].map(k=><motion.button key={k} type="button" className="key-btn" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={()=>press(k)}>{k}</motion.button>)}<motion.button type="button" className="key-btn action" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={()=>setPin('')}>Clear</motion.button><motion.button type="button" className="key-btn" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={()=>press('0')}>0</motion.button><motion.button type="button" className="key-btn action" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={backspace} title="Backspace"><Delete size={20}/></motion.button></div></div></Modal>
 }
 
 function AiModal({data,close}:{data:FinanceData;close:()=>void}) {
@@ -2813,7 +2841,7 @@ function AiModal({data,close}:{data:FinanceData;close:()=>void}) {
    { label: 'Savings Goal', prompt: 'Simulate Savings Goal' },
    { label: 'Debt Strategy', prompt: 'Debt Payoff Strategy' }
  ];
- return <Modal close={close} title="AI Advisor"><div className="ai-modal"><div className="ai-chips">{quickActions.map(q=><button key={q.label} type="button" className="ai-chip" onClick={()=>send(q.prompt)}><Sparkles size={11} style={{display:'inline',marginRight:4}}/>{q.label}</button>)}</div><div className="ai-chat">{messages.map((m,i)=><div key={i} className={`ai-msg ${m.sender}`}>{m.sender==='user'?m.text:<SafeMarkdown content={m.text}/>}</div>)}{loading&&<div className="ai-msg bot" style={{display:'flex',alignItems:'center',gap:8}}><Sparkles size={15}/><span>Thinking...</span></div>}<div ref={chatBottomRef}/></div><form className="ai-composer" onSubmit={e=>{e.preventDefault();send()}}><input value={input} onChange={e=>setInput(e.target.value)} placeholder="Ask AI Advisor about your spending, budget, or savings..." disabled={loading}/><button type="submit" className="button primary" disabled={loading||!input.trim()}><Send size={16}/></button></form></div></Modal>
+ return <Modal close={close} title="AI Advisor"><div className="ai-modal"><div className="ai-chips">{quickActions.map(q=><button key={q.label} type="button" className="ai-chip" onClick={()=>send(q.prompt)}><Sparkles size={11} style={{display:'inline',marginRight:4}}/>{q.label}</button>)}</div><div className="ai-chat"><AnimatePresence initial={false}>{messages.map((m,i)=><motion.div key={i} className={`ai-msg ${m.sender}`} variants={messageVariants} initial="initial" animate="animate" style={{willChange:'transform,opacity'}}>{m.sender==='user'?m.text:<SafeMarkdown content={m.text}/>}</motion.div>)}{loading&&<motion.div className="ai-msg bot" variants={messageVariants} initial="initial" animate="animate" style={{display:'flex',alignItems:'center',gap:8}}><Sparkles size={15}/><span>Thinking...</span></motion.div>}</AnimatePresence><div ref={chatBottomRef}/></div><form className="ai-composer" onSubmit={e=>{e.preventDefault();send()}}><input value={input} onChange={e=>setInput(e.target.value)} placeholder="Ask AI Advisor about your spending, budget, or savings..." disabled={loading}/><button type="submit" className="button primary" disabled={loading||!input.trim()}><Send size={16}/></button></form></div></Modal>
 }
 
 function PrivacyModal({ close }: { close: () => void }) {
