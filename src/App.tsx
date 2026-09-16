@@ -1603,29 +1603,21 @@ function StatsPage({ data, setPage }: { data: FinanceData; setPage?: (p: Page, d
   const [monthDir, setMonthDir] = useState(1)
   const reduced = useReducedMotion()
 
-  // Last 6 months array (oldest first)
   const months = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date()
-    d.setDate(1)
-    d.setMonth(d.getMonth() - 5 + i)
-    return monthKey(d)
+    const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 5 + i); return monthKey(d)
   })
-
-  const monthLabel = (key: string) =>
-    new Date(key + '-01T12:00:00').toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
+  const monthLabel = (key: string) => new Date(key + '-01T12:00:00').toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
+  const monthShort = (key: string) => new Date(key + '-01T12:00:00').toLocaleDateString(undefined, { month: 'short' })
 
   const monthStats = (key: string) => {
-    const income = data.transactions
-      .filter(t => t.type === 'income' && t.date.slice(0, 7) === key)
-      .reduce((n, t) => n + t.amount, 0)
-    const expenses = data.transactions
-      .filter(t => t.type === 'expense' && t.date.slice(0, 7) === key)
-      .reduce((n, t) => n + t.amount, 0)
-    const dues = data.transactions
-      .filter(t => t.type === 'due' && t.date.slice(0, 7) === key)
-      .reduce((n, t) => n + t.amount, 0)
-    const hasData = data.transactions.some(t => t.date.slice(0, 7) === key)
-    return { income, expenses, dues, net: income - expenses - dues, hasData }
+    const txs = data.transactions.filter(t => t.date.slice(0, 7) === key)
+    const income = txs.filter(t => t.type === 'income').reduce((n, t) => n + getEarnedIncomeAmount(t), 0)
+    const expenses = txs.filter(t => t.type === 'expense').reduce((n, t) => n + getPersonalExpenseAmount(t), 0)
+    const cashOut = txs.filter(t => t.type === 'expense').reduce((n, t) => n + getCashFlowAmount(t), 0)
+    const hasData = txs.length > 0
+    const net = income - expenses
+    const savingsRate = income > 0 ? Math.max(0, Math.min(100, (net / income) * 100)) : 0
+    return { income, expenses, cashOut, net, savingsRate, hasData }
   }
 
   const sel = monthStats(selected)
@@ -1634,40 +1626,30 @@ function StatsPage({ data, setPage }: { data: FinanceData; setPage?: (p: Page, d
   const budgetUsedPct = budgetForSelected > 0 ? Math.min(100, (sel.expenses / budgetForSelected) * 100) : 0
   const budgetRemaining = budgetForSelected > 0 ? Math.max(0, budgetForSelected - sel.expenses) : 0
 
+  // Category bars: % of total personal expenses (not relative to highest bar)
   const cats = data.settings.categories || categories
   const spending = cats
     .map(c => ({ name: c, value: categorySpend(data.transactions, c, selected) }))
     .filter(x => x.value > 0)
     .sort((a, b) => b.value - a.value)
-  const totalExpenseForPct = spending.reduce((n, x) => n + x.value, 0)
+  const totalExpenses = sel.expenses > 0 ? sel.expenses : spending.reduce((n, x) => n + x.value, 0)
 
-  const monthExpenses = months.map(m => monthStats(m).expenses)
-  const barMax = Math.max(...monthExpenses, 1)
+  const trendData = months.map(m => monthStats(m))
+  const barMax = Math.max(...trendData.map(d => Math.max(d.income, d.expenses)), 1)
+
+  const receivables = getOutstandingReceivables(data.transactions)
+  const totalReceivable = receivables.reduce((n, r) => n + r.totalOwed, 0)
 
   const handleMonthSelect = (m: string) => {
-    const oldIdx = months.indexOf(selected)
-    const newIdx = months.indexOf(m)
-    setMonthDir(newIdx >= oldIdx ? 1 : -1)
-    setSelected(m)
+    const oldIdx = months.indexOf(selected); const newIdx = months.indexOf(m)
+    setMonthDir(newIdx >= oldIdx ? 1 : -1); setSelected(m)
   }
 
-  // Stagger variants
-  const gridVariants = (reduced ? undefined : {
-    initial: {},
-    animate: { transition: { staggerChildren: 0.07, delayChildren: 0.05 } },
-  }) as import('framer-motion').Variants | undefined
-  const cardVar = (reduced ? undefined : {
-    initial: { opacity: 0, y: 14, scale: 0.97 },
-    animate: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring' as const, stiffness: 380, damping: 32, mass: 0.85 } },
-  }) as import('framer-motion').Variants | undefined
-  const catRowVar = (reduced ? undefined : {
-    initial: { opacity: 0, x: -8 },
-    animate: { opacity: 1, x: 0, transition: { type: 'spring' as const, stiffness: 360, damping: 30 } },
-  }) as import('framer-motion').Variants | undefined
-  const catGridVar = (reduced ? undefined : {
-    initial: {},
-    animate: { transition: { staggerChildren: 0.05, delayChildren: 0.1 } },
-  }) as import('framer-motion').Variants | undefined
+  const gridVar = (reduced ? undefined : { initial: {}, animate: { transition: { staggerChildren: 0.07, delayChildren: 0.04 } } }) as import('framer-motion').Variants | undefined
+  const cardVar = (reduced ? undefined : { initial: { opacity: 0, y: 14, scale: 0.97 }, animate: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring' as const, stiffness: 380, damping: 32, mass: 0.85 } } }) as import('framer-motion').Variants | undefined
+  const catRowVar = (reduced ? undefined : { initial: { opacity: 0, x: -8 }, animate: { opacity: 1, x: 0, transition: { type: 'spring' as const, stiffness: 360, damping: 30 } } }) as import('framer-motion').Variants | undefined
+  const catGridVar = (reduced ? undefined : { initial: {}, animate: { transition: { staggerChildren: 0.045, delayChildren: 0.08 } } }) as import('framer-motion').Variants | undefined
+  const mkChange = reduced ? reducedMotionVariants : monthChangeVariants
 
   return (
     <div className="stats-page">
@@ -1678,249 +1660,168 @@ function StatsPage({ data, setPage }: { data: FinanceData; setPage?: (p: Page, d
           <p>Patterns that help you make calmer decisions.</p>
         </div>
         <div style={{ minWidth: 160 }}>
-          <ThemedSelect
-            ariaLabel="Select month"
-            value={selected}
-            onChange={v => handleMonthSelect(v)}
-            options={months.map(m => ({ value: m, label: monthLabel(m), icon: <CalendarDays size={14} /> }))}
-            compact
-          />
+          <ThemedSelect ariaLabel="Select month" value={selected} onChange={v => handleMonthSelect(v)} options={months.map(m => ({ value: m, label: monthLabel(m), icon: <CalendarDays size={14} /> }))} compact />
         </div>
       </div>
 
-      {/* Summary metrics — stagger in */}
       <AnimatePresence mode="wait" custom={monthDir} initial={false}>
-        <motion.section
-          key={`summary-${selected}`}
-          custom={monthDir}
-          variants={reduced ? reducedMotionVariants : monthChangeVariants}
-          initial="initial"
-          animate="animate"
-          exit="exit"
-          className="stats-summary"
-          style={{ willChange: 'transform, opacity' }}
-        >
-          <Metric label="Income" value={f(sel.income)} detail={monthLabel(selected)} icon={<ArrowDownLeft size={18} />} tone="positive" />
-          <Metric label="Expenses" value={f(sel.expenses)} detail={monthLabel(selected)} icon={<ArrowUpRight size={18} />} tone="negative" />
-          <Metric
-            label="Net"
-            value={sel.net >= 0 ? `+${f(sel.net)}` : f(sel.net)}
-            detail="Income minus expenses"
-            icon={<WalletCards size={18} />}
-            tone={sel.net >= 0 ? 'positive' : 'negative'}
-          />
+        <motion.section key={`summary-${selected}`} custom={monthDir} variants={mkChange} initial="initial" animate="animate" exit="exit" className="stats-summary" style={{ willChange: 'transform, opacity' }}>
+          <Metric label="Earned" value={f(sel.income)} detail={monthLabel(selected)} icon={<ArrowDownLeft size={18} />} tone="positive" />
+          <Metric label="Spent" value={f(sel.expenses)} detail="Personal spending" icon={<ArrowUpRight size={18} />} tone="negative" />
+          <Metric label="Saved" value={sel.net >= 0 ? `+${f(sel.net)}` : f(sel.net)} detail={`${Math.round(sel.savingsRate)}% savings rate`} icon={<WalletCards size={18} />} tone={sel.net >= 0 ? 'positive' : 'negative'} />
         </motion.section>
       </AnimatePresence>
 
-      {/* Chart grid — cards stagger in on mount */}
-      <motion.div
-        className="chart-grid"
-        variants={gridVariants}
-        initial="initial"
-        animate="animate"
-      >
-        {/* Income vs Expense */}
+      <motion.div className="chart-grid" variants={gridVar} initial="initial" animate="animate">
+
+        {/* Cash flow */}
         <motion.section className="chart-card" variants={cardVar}>
           <div className="chart-head">
             <div>
-              <p className="eyebrow">Income vs expense</p>
-              <AnimatePresence mode="wait" custom={monthDir} initial={false}>
-                <motion.h2
-                  key={`head-income-${selected}`}
-                  custom={monthDir}
-                  variants={reduced ? reducedMotionVariants : monthChangeVariants}
-                  initial="initial" animate="animate" exit="exit"
-                >
-                  {monthLabel(selected)}
-                </motion.h2>
-              </AnimatePresence>
+              <p className="eyebrow">Cash flow</p>
+              <AnimatePresence mode="wait" custom={monthDir} initial={false}><motion.h2 key={`cf-${selected}`} custom={monthDir} variants={mkChange} initial="initial" animate="animate" exit="exit">{monthLabel(selected)}</motion.h2></AnimatePresence>
             </div>
             <BarChart3 size={20} />
           </div>
           <AnimatePresence mode="wait" custom={monthDir} initial={false}>
-            <motion.div
-              key={`bars-${selected}`}
-              custom={monthDir}
-              variants={reduced ? reducedMotionVariants : monthChangeVariants}
-              initial="initial" animate="animate" exit="exit"
-              className="compare-bars"
-              style={{ willChange: 'transform, opacity' }}
-            >
-              <Bar label="Income" value={sel.income} max={Math.max(sel.income, sel.expenses, 1)} tone="positive" />
-              <Bar label="Expenses" value={sel.expenses} max={Math.max(sel.income, sel.expenses, 1)} tone="negative" />
-              <div className="compare-row" style={{ marginTop: 4, opacity: 0.75 }}>
-                <span>Net</span>
+            <motion.div key={`cfbars-${selected}`} custom={monthDir} variants={mkChange} initial="initial" animate="animate" exit="exit" className="compare-bars" style={{ willChange: 'transform, opacity' }}>
+              <Bar label="Earned" value={sel.income} max={Math.max(sel.income, sel.expenses, 1)} tone="positive" />
+              <Bar label="Spent" value={sel.expenses} max={Math.max(sel.income, sel.expenses, 1)} tone="negative" />
+              {sel.cashOut > sel.expenses + 0.01 && <Bar label="Paid out" value={sel.cashOut} max={Math.max(sel.income, sel.cashOut, 1)} tone="neutral" />}
+              <div className="compare-row" style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--border)' }}>
+                <span style={{ fontWeight: 600 }}>Net</span>
                 <div className="compare-track" style={{ background: 'transparent' }} />
-                <b style={{ color: sel.net >= 0 ? 'var(--positive)' : 'var(--negative)' }}>
-                  {sel.net >= 0 ? '+' : ''}{f(sel.net)}
-                </b>
+                <b style={{ color: sel.net >= 0 ? 'var(--positive)' : 'var(--negative)', fontSize: 13 }}>{sel.net >= 0 ? '+' : ''}{f(sel.net)}</b>
               </div>
             </motion.div>
           </AnimatePresence>
         </motion.section>
 
-        {/* Budget utilization — animated SVG donut */}
+        {/* Budget donut */}
         <motion.section className="chart-card" variants={cardVar}>
           <div className="chart-head">
             <div>
-              <p className="eyebrow">Budget utilization</p>
-              <AnimatePresence mode="wait" custom={monthDir} initial={false}>
-                <motion.h2
-                  key={`head-budget-${selected}`}
-                  custom={monthDir}
-                  variants={reduced ? reducedMotionVariants : monthChangeVariants}
-                  initial="initial" animate="animate" exit="exit"
-                >
-                  {monthLabel(selected)}
-                </motion.h2>
-              </AnimatePresence>
+              <p className="eyebrow">Budget used</p>
+              <AnimatePresence mode="wait" custom={monthDir} initial={false}><motion.h2 key={`bu-${selected}`} custom={monthDir} variants={mkChange} initial="initial" animate="animate" exit="exit">{monthLabel(selected)}</motion.h2></AnimatePresence>
             </div>
             <PieChart size={20} />
           </div>
           {budgetForSelected > 0 ? (
             <AnimatePresence mode="wait" initial={false}>
-              <motion.div
-                key={`donut-${selected}`}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1, transition: { duration: 0.2 } }}
-                exit={{ opacity: 0, transition: { duration: 0.12 } }}
-              >
-                <AnimatedDonut
-                  pct={budgetUsedPct}
-                  label={f(budgetRemaining)}
-                  sublabel={`still available of ${f(budgetForSelected)}`}
-                />
+              <motion.div key={`donut-${selected}`} initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { duration: 0.2 } }} exit={{ opacity: 0, transition: { duration: 0.12 } }}>
+                <AnimatedDonut pct={budgetUsedPct} label={f(budgetRemaining)} sublabel={`left of ${f(budgetForSelected)}`} />
+                {budgetUsedPct >= 100 && <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--negative)', marginTop: 8 }}>Over budget by {f(sel.expenses - budgetForSelected)}</p>}
               </motion.div>
             </AnimatePresence>
           ) : (
             <div className="chart-empty">
-              <p style={{ margin: 0, fontSize: 13 }}>Set a monthly budget in the Budget tab to track progress.</p>
-              {setPage && (
-                <button type="button" className="text-button" onClick={() => setPage('budget', 1)} style={{ marginTop: 8 }}>
-                  Go to Budget <ChevronRight size={14} />
-                </button>
-              )}
+              <p style={{ margin: 0, fontSize: 13 }}>Set a monthly budget to track utilization here.</p>
+              {setPage && <button type="button" className="text-button" onClick={() => setPage('budget', 1)} style={{ marginTop: 8 }}>Go to Budget <ChevronRight size={14} /></button>}
             </div>
           )}
         </motion.section>
 
-        {/* Last 6 months — clickable bar chart */}
+        {/* 6-month grouped bars */}
         <motion.section className="chart-card wide" variants={cardVar}>
           <div className="chart-head">
-            <div>
-              <p className="eyebrow">Spending pattern</p>
-              <h2>Last 6 months</h2>
+            <div><p className="eyebrow">6-month overview</p><h2>Income vs spending</h2></div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 11, color: 'var(--muted)' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><i style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: 'var(--positive)' }} />Earned</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><i style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: 'var(--negative)' }} />Spent</span>
             </div>
-            <span className="muted">Expense total</span>
           </div>
-          <div className="monthly-bars">
-            {months.map(m => {
-              const ms = monthStats(m)
-              const heightPct = ms.hasData ? ms.expenses / barMax * 100 : 0
-              const isSelected = m === selected
+          <div className="monthly-bars" style={{ height: 170, marginTop: 12 }}>
+            {months.map((m, mi) => {
+              const ms = trendData[mi]
+              const incH = ms.hasData ? (ms.income / barMax) * 100 : 0
+              const expH = ms.hasData ? (ms.expenses / barMax) * 100 : 0
+              const isSel = m === selected
               return (
-                <motion.div
-                  key={m}
-                  style={{ cursor: 'pointer', opacity: isSelected ? 1 : 0.72 }}
-                  animate={{ opacity: isSelected ? 1 : 0.72 }}
-                  transition={{ duration: 0.18 }}
-                  whileTap={{ scale: 0.94, transition: { type: 'spring', stiffness: 500, damping: 30 } }}
-                  onClick={() => handleMonthSelect(m)}
-                  title={ms.hasData ? `${monthLabel(m)}: ${f(ms.expenses)}` : `${monthLabel(m)}: No data`}
-                >
-                  <div
-                    className="bar-track"
-                    style={isSelected ? { outline: '2px solid var(--accent)', outlineOffset: 2, borderRadius: 7 } : {}}
-                  >
+                <motion.div key={m} animate={{ opacity: isSel ? 1 : 0.65 }} transition={{ duration: 0.18 }} whileTap={{ scale: 0.94, transition: { type: 'spring', stiffness: 500, damping: 30 } }} onClick={() => handleMonthSelect(m)} style={{ cursor: 'pointer' }} title={ms.hasData ? `${monthLabel(m)}: Earned ${f(ms.income)}, Spent ${f(ms.expenses)}` : `${monthLabel(m)}: No data`}>
+                  <div className="bar-track" style={{ display: 'flex', gap: 2, alignItems: 'flex-end', padding: '0 2px', ...(isSel ? { outline: '2px solid var(--accent)', outlineOffset: 2, borderRadius: 7 } : {}) }}>
                     {ms.hasData ? (
-                      <motion.span
-                        initial={{ height: 0 }}
-                        animate={{ height: `${heightPct}%` }}
-                        transition={{ type: 'spring', stiffness: 160, damping: 26, mass: 1.1 }}
-                        style={isSelected ? { background: 'var(--accent)', willChange: 'height' } : { willChange: 'height' }}
-                      />
-                    ) : null}
+                      <>
+                        <motion.span initial={{ height: 0 }} animate={{ height: `${incH}%` }} transition={{ type: 'spring', stiffness: 160, damping: 26, mass: 1.1 }} style={{ flex: 1, background: 'var(--positive)', borderRadius: '4px 4px 0 0', willChange: 'height', minHeight: 2 }} />
+                        <motion.span initial={{ height: 0 }} animate={{ height: `${expH}%` }} transition={{ type: 'spring', stiffness: 160, damping: 26, mass: 1.1, delay: 0.05 }} style={{ flex: 1, background: 'var(--negative)', borderRadius: '4px 4px 0 0', willChange: 'height', minHeight: 2 }} />
+                      </>
+                    ) : <span style={{ flex: 1, height: '6%', opacity: 0.3 }} />}
                   </div>
-                  <small style={isSelected ? { color: 'var(--accent)', fontWeight: 700 } : {}}>
-                    {new Date(m + '-01T12:00:00').toLocaleDateString(undefined, { month: 'short' })}
-                  </small>
+                  <small style={isSel ? { color: 'var(--accent)', fontWeight: 700 } : {}}>{monthShort(m)}</small>
                 </motion.div>
               )
             })}
           </div>
+          <AnimatePresence mode="wait" custom={monthDir} initial={false}>
+            <motion.div key={`trend-sel-${selected}`} custom={monthDir} variants={mkChange} initial="initial" animate="animate" exit="exit" style={{ display: 'flex', gap: 16, marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+              <div style={{ flex: 1 }}><p style={{ margin: 0, fontSize: 11, color: 'var(--muted)' }}>Earned</p><strong style={{ color: 'var(--positive)' }}>{f(sel.income)}</strong></div>
+              <div style={{ flex: 1 }}><p style={{ margin: 0, fontSize: 11, color: 'var(--muted)' }}>Spent</p><strong style={{ color: 'var(--negative)' }}>{f(sel.expenses)}</strong></div>
+              <div style={{ flex: 1 }}><p style={{ margin: 0, fontSize: 11, color: 'var(--muted)' }}>Savings rate</p><strong style={{ color: sel.savingsRate > 0 ? 'var(--positive)' : 'var(--muted)' }}>{Math.round(sel.savingsRate)}%</strong></div>
+            </motion.div>
+          </AnimatePresence>
         </motion.section>
 
-        {/* Category spending — staggered rows */}
+        {/* Category spending — % of total expenses */}
         <motion.section className="chart-card wide" variants={cardVar}>
           <div className="chart-head">
-            <div>
-              <p className="eyebrow">Where it went</p>
-              <h2>Category spending</h2>
-            </div>
+            <div><p className="eyebrow">Where it went</p><h2>Spending by category</h2></div>
+            <AnimatePresence mode="wait" custom={monthDir} initial={false}>
+              <motion.span key={`cat-total-${selected}`} custom={monthDir} variants={mkChange} initial="initial" animate="animate" exit="exit" className="muted" style={{ fontSize: 12, flexShrink: 0 }}>
+                {spending.length > 0 ? f(totalExpenses) : '—'}
+              </motion.span>
+            </AnimatePresence>
           </div>
           <AnimatePresence mode="wait" initial={false}>
             {spending.length > 0 ? (
-              <motion.div
-                key={`cat-${selected}`}
-                variants={catGridVar}
-                initial="initial"
-                animate="animate"
-                exit={{ opacity: 0, transition: { duration: 0.1 } }}
-                className="category-chart"
-              >
+              <motion.div key={`cat-${selected}`} variants={catGridVar} initial="initial" animate="animate" exit={{ opacity: 0, transition: { duration: 0.1 } }} className="category-chart">
                 {spending.map((x, i) => {
-                  const pct = totalExpenseForPct > 0 ? (x.value / totalExpenseForPct * 100).toFixed(1) : '0'
-                  const barPct = x.value / Math.max(...spending.map(s => s.value)) * 100
+                  const pctOfTotal = totalExpenses > 0 ? (x.value / totalExpenses) * 100 : 0
                   return (
                     <motion.div key={x.name} variants={catRowVar}>
                       <div>
-                        <span>
-                          <i style={{ background: `var(--chart-${i % 5})` }} />
-                          {x.name}
-                        </span>
-                        <b>
-                          {f(x.value)}
-                          {totalExpenseForPct > 0 && (
-                            <span style={{ fontWeight: 400, color: 'var(--muted)', marginLeft: 5, fontSize: 11 }}>
-                              · {pct}%
-                            </span>
-                          )}
-                        </b>
+                        <span><i style={{ background: `var(--chart-${i % 5})` }} />{x.name}</span>
+                        <b>{f(x.value)}<span style={{ fontWeight: 400, color: 'var(--muted)', marginLeft: 6, fontSize: 11 }}>{pctOfTotal.toFixed(1)}%</span></b>
                       </div>
-                      {/* Animated category bar */}
-                      <div className="progress" style={{ height: 6, marginTop: 2 }}>
-                        <motion.span
-                          className="progress-fill normal"
-                          style={{
-                            background: `var(--chart-${i % 5})`,
-                            willChange: 'width',
-                          }}
-                          initial={{ width: 0 }}
-                          animate={{ width: `${barPct}%` }}
-                          transition={{ type: 'spring', stiffness: 160, damping: 26, mass: 1.1, delay: i * 0.04 }}
-                        />
+                      <div className="progress" style={{ height: 6, marginTop: 3 }}>
+                        <motion.span className="progress-fill normal" style={{ background: `var(--chart-${i % 5})`, willChange: 'width' }} initial={{ width: 0 }} animate={{ width: `${pctOfTotal}%` }} transition={{ type: 'spring', stiffness: 160, damping: 26, mass: 1.1, delay: i * 0.04 }} />
                       </div>
                     </motion.div>
                   )
                 })}
               </motion.div>
             ) : (
-              <motion.div
-                key="cat-empty"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1, transition: { duration: 0.2 } }}
-                exit={{ opacity: 0, transition: { duration: 0.1 } }}
-                className="chart-empty"
-              >
-                {sel.hasData ? 'No expense categories found for this month.' : 'No transactions in this month.'}
+              <motion.div key="cat-empty" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { duration: 0.2 } }} exit={{ opacity: 0, transition: { duration: 0.1 } }} className="chart-empty">
+                {sel.hasData ? 'No expense categories recorded this month.' : 'No transactions in this month.'}
               </motion.div>
             )}
           </AnimatePresence>
         </motion.section>
+
+        {/* Outstanding receivables */}
+        {totalReceivable > 0 && (
+          <motion.section className="chart-card wide" variants={cardVar}>
+            <div className="chart-head">
+              <div><p className="eyebrow">Money owed to you</p><h2>Outstanding balance</h2></div>
+              <b style={{ color: 'var(--positive)', fontFamily: 'var(--font)', fontSize: 18 }}>{f(totalReceivable)}</b>
+            </div>
+            <div style={{ marginTop: 16, display: 'grid', gap: 10 }}>
+              {receivables.map((r, i) => (
+                <motion.div key={r.person} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0, transition: { type: 'spring', stiffness: 360, damping: 30, delay: i * 0.04 } }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--surface-soft)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--surface-strong)', display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 700, color: 'var(--accent)' }}>{r.person.charAt(0).toUpperCase()}</div>
+                    <div><strong style={{ fontSize: 14 }}>{r.person}</strong><p style={{ margin: 0, fontSize: 11, color: 'var(--muted)' }}>{r.items.length} item{r.items.length !== 1 ? 's' : ''}</p></div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}><strong style={{ color: 'var(--positive)', fontSize: 15 }}>{f(r.totalOwed)}</strong><p style={{ margin: 0, fontSize: 11, color: 'var(--muted)' }}>pending</p></div>
+                </motion.div>
+              ))}
+            </div>
+          </motion.section>
+        )}
+
       </motion.div>
     </div>
   )
 }
+
 function Bar({label,value,max,tone}:{label:string;value:number;max:number;tone:string}){return <div className="compare-row"><span>{label}</span><div className="compare-track"><motion.i className={tone} initial={{width:0}} animate={{width:`${value/max*100}%`}} transition={{ type:'spring', stiffness:160, damping:26, mass:1.1 }} style={{willChange:'width'}}/></div><b>{value?formatMoney(value):'—'}</b></div>}
 
 function ConfigPage({
@@ -2282,8 +2183,9 @@ function TransactionModal({
   // Paid for others state
   const [paidFor, setPaidFor] = useState<'myself' | 'others'>(initial?.paidFor ?? 'myself')
   const [myShare, setMyShare] = useState<string>(() => {
-    if (initial?.myShare !== undefined) return String(initial.myShare)
-    if (initial?.amount) return String(initial.amount)
+    // When editing an existing split transaction, restore myShare
+    if (initial?.myShare !== undefined && initial.paidFor === 'others') return String(initial.myShare)
+    // When creating new — leave blank so user consciously enters their share
     return ''
   })
   const [splits, setSplits] = useState<Array<{ id: string; person: string; amount: number; convertedToMyExpense?: number }>>(() => {
@@ -2508,11 +2410,35 @@ function TransactionModal({
         >
           <div className="split-builder-header">
             <strong>Split breakdown</strong>
-            <span>Total: {currencySymbol}{form.amount || '0'}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12, color: 'var(--muted)' }}>Total: {currencySymbol}{form.amount || '0'}</span>
+              <button
+                type="button"
+                className="button compact secondary"
+                style={{ fontSize: 11, padding: '3px 8px', height: 'auto' }}
+                onClick={() => {
+                  // Auto-split equally among you + all friends
+                  const total = Number(form.amount) || 0
+                  const numPeople = 1 + splits.length
+                  const each = Math.floor((total / numPeople) * 100) / 100
+                  const remainder = Math.round((total - each * numPeople) * 100) / 100
+                  setMyShare(String(each + remainder)) // give remainder to "You"
+                  setSplits(splits.map(s => ({ ...s, amount: each })))
+                }}
+                title="Divide the total equally among everyone"
+              >
+                Split equally
+              </button>
+            </div>
           </div>
 
           <div className="split-user-row">
-            <span>You</span>
+            <div>
+              <span>Your share</span>
+              <small style={{ display: 'block', fontSize: 10, color: 'var(--muted)', marginTop: 1 }}>
+                Only this counts toward your budget
+              </small>
+            </div>
             <div className="input-with-currency">
               <span className="input-prefix">{currencySymbol}</span>
               <input
@@ -2579,14 +2505,14 @@ function TransactionModal({
             }`}
           >
             {isSplitBalanced ? (
-              <span>✓ {currencySymbol}{totalAmt} / {currencySymbol}{totalAmt} allocated</span>
+              <span>✓ Fully split — {currencySymbol}{totalAmt} assigned across all people</span>
             ) : remainingToAllocate > 0 ? (
               <span>
-                {currencySymbol}{totalAllocated} / {currencySymbol}{totalAmt} allocated · {currencySymbol}{remainingToAllocate.toFixed(2)} remaining
+                {currencySymbol}{totalAllocated.toFixed(2)} assigned · {currencySymbol}{remainingToAllocate.toFixed(2)} still unassigned
               </span>
             ) : (
               <span>
-                {currencySymbol}{totalAllocated} / {currencySymbol}{totalAmt} allocated · {currencySymbol}{Math.abs(remainingToAllocate).toFixed(2)} over
+                Over by {currencySymbol}{Math.abs(remainingToAllocate).toFixed(2)} — reduce someone's share
               </span>
             )}
           </div>
