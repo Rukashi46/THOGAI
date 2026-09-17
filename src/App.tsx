@@ -1342,7 +1342,12 @@ function TransactionRow({
           {tx.category}
           {tx.account ? ` · ${tx.account}` : ''}
           {isRepayment && tx.repaymentFor?.person ? ` · From ${tx.repaymentFor.person}` : ''}
-          {isSplit && ` · Shared with ${tx.splits!.map((s) => s.person).filter(Boolean).join(', ')}`}
+          {isSplit && ` · Split with ${tx.splits!.map((s) => s.person).filter(Boolean).join(', ')}`}
+          {isSplit && tx.myShare !== undefined && (
+            <span style={{ display: 'block', fontSize: 10, color: 'var(--muted)', marginTop: 1 }}>
+              Your share: {formatMoney(tx.myShare, currency)}
+            </span>
+          )}
           {tx.recurring ? ' · Recurring' : ''}
           {tx.notes ? ` · ${tx.notes}` : ''}
         </span>
@@ -1352,8 +1357,11 @@ function TransactionRow({
           {tx.type === 'income' ? '+' : '−'} {formatMoney(tx.amount, currency)}
         </strong>
         {isSplit ? (
-          <span title={`Personal spending: ${formatMoney(tx.myShare ?? tx.amount, currency)}`}>
-            Personal: {formatMoney(tx.myShare ?? tx.amount, currency)}
+          <span title={isSplit ? `Paid out: ${formatMoney(tx.amount, currency)} · Your share: ${formatMoney(tx.myShare ?? tx.amount, currency)}` : undefined}>
+            {isSplit
+              ? formatMoney(tx.myShare ?? tx.amount, currency)
+              : formatMoney(tx.amount, currency)
+            }
           </span>
         ) : isRepayment ? (
           <span>Repayment</span>
@@ -2233,13 +2241,15 @@ function TransactionModal({
     return Array.from(map.values())
   }, [allTransactions])
 
-  // Split calculations
+  // Split calculations — myShare is derived: total minus what friends owe
+  // User never types their own share — it's calculated automatically
   const totalAmt = Number(form.amount) || 0
-  const userShareAmt = Number(myShare) || 0
-  const sumSplits = splits.reduce((acc, s) => acc + (Number(s.amount) || 0), 0)
-  const totalAllocated = userShareAmt + sumSplits
-  const remainingToAllocate = totalAmt - totalAllocated
-  const isSplitBalanced = Math.abs(remainingToAllocate) < 0.01 && totalAmt > 0
+  const sumFriendShares = splits.reduce((acc, s) => acc + (Number(s.amount) || 0), 0)
+  const derivedMyShare = Math.max(0, totalAmt - sumFriendShares)
+  const isSplitOverAllocated = sumFriendShares > totalAmt + 0.01
+  const isSplitBalanced = !isSplitOverAllocated && splits.length > 0 && totalAmt > 0 && splits.every(s => s.person.trim() && (Number(s.amount) || 0) > 0)
+  // For backward compat — keep userShareAmt for submit handler
+  const userShareAmt = derivedMyShare
   const currencySymbol = currencies.find((c) => c.code === currency)?.symbol ?? '₹'
 
   const handleTypeChange = (t: TransactionType) => {
@@ -2281,24 +2291,27 @@ function TransactionModal({
     if (!form.category) return setError('Choose a category.')
 
     if (form.type === 'expense' && paidFor === 'others') {
-      if (userShareAmt < 0) return setError('Your share cannot be negative.')
+      if (splits.length === 0) return setError('Add at least one person you paid for.')
       for (const s of splits) {
-        if (!s.person.trim()) return setError('Please specify names for all people in the split.')
-        if (!s.amount || s.amount <= 0) return setError(`Please enter a valid amount for ${s.person || 'all people'}.`)
+        if (!s.person.trim()) return setError('Please enter a name for everyone in the split.')
+        if (!s.amount || s.amount <= 0) return setError(`Enter a valid amount for ${s.person || 'each person'}.`)
       }
-      if (!isSplitBalanced) {
-        return setError(`The allocated shares (${currencySymbol}${totalAllocated}) must equal the total amount (${currencySymbol}${totalAmt}).`)
+      if (isSplitOverAllocated) {
+        return setError(`Friends' shares (${currencySymbol}${sumFriendShares.toFixed(2)}) exceed the total (${currencySymbol}${totalAmt}). Reduce someone's amount.`)
+      }
+      if (derivedMyShare < 0) {
+        return setError('Your share cannot be negative. Check the amounts.')
       }
       submit(
         {
           ...form,
           amount,
           paidFor: 'others',
-          myShare: userShareAmt,
+          myShare: derivedMyShare,
           splits: splits.map((s) => ({
             id: s.id,
             person: s.person.trim(),
-            amount: s.amount,
+            amount: Number(s.amount) || 0,
             convertedToMyExpense: s.convertedToMyExpense
           }))
         },
@@ -2385,9 +2398,7 @@ function TransactionModal({
               onChange={(v) => {
                 const next = v as 'myself' | 'others'
                 setPaidFor(next)
-                if (next === 'others' && !myShare && form.amount) {
-                  setMyShare(form.amount)
-                }
+                // Don't pre-fill myShare — it's now auto-derived from total minus friends
               }}
               options={[
                 { value: 'myself', label: 'Myself' },
@@ -2408,56 +2419,40 @@ function TransactionModal({
           exit="exit"
           style={{ transformOrigin: 'top center', overflow: 'hidden' }}
         >
+          {/* Header with equal-split helper */}
           <div className="split-builder-header">
-            <strong>Split breakdown</strong>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 12, color: 'var(--muted)' }}>Total: {currencySymbol}{form.amount || '0'}</span>
-              <button
-                type="button"
-                className="button compact secondary"
-                style={{ fontSize: 11, padding: '3px 8px', height: 'auto' }}
-                onClick={() => {
-                  // Auto-split equally among you + all friends
-                  const total = Number(form.amount) || 0
-                  const numPeople = 1 + splits.length
-                  const each = Math.floor((total / numPeople) * 100) / 100
-                  const remainder = Math.round((total - each * numPeople) * 100) / 100
-                  setMyShare(String(each + remainder)) // give remainder to "You"
-                  setSplits(splits.map(s => ({ ...s, amount: each })))
-                }}
-                title="Divide the total equally among everyone"
-              >
-                Split equally
-              </button>
-            </div>
-          </div>
-
-          <div className="split-user-row">
             <div>
-              <span>Your share</span>
-              <small style={{ display: 'block', fontSize: 10, color: 'var(--muted)', marginTop: 1 }}>
-                Only this counts toward your budget
-              </small>
+              <strong>Who did you pay for?</strong>
+              <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--muted)', lineHeight: 1.4 }}>
+                Enter each person's share. Your portion is calculated automatically.
+              </p>
             </div>
-            <div className="input-with-currency">
-              <span className="input-prefix">{currencySymbol}</span>
-              <input
-                type="number"
-                step="any"
-                min="0"
-                placeholder="0"
-                value={myShare}
-                onChange={(e) => setMyShare(e.target.value)}
-              />
-            </div>
+            <button
+              type="button"
+              className="button compact secondary"
+              style={{ fontSize: 11, padding: '3px 10px', height: 'auto', flexShrink: 0 }}
+              onClick={() => {
+                // Split equally: divide total among all friends evenly
+                // My share = total - sum(friends), so we just set each friend equally
+                const total = Number(form.amount) || 0
+                const numFriends = splits.length
+                if (numFriends === 0) return
+                const each = Math.floor((total / (numFriends + 1)) * 100) / 100
+                setSplits(splits.map(s => ({ ...s, amount: each })))
+              }}
+              title="Split total equally among everyone including you"
+            >
+              Split equally
+            </button>
           </div>
 
+          {/* Friend rows — only friends, no "You" input row */}
           <div className="space-y-2">
             {splits.map((s) => (
               <div key={s.id} className="split-person-row">
                 <input
                   list="datalist-known-people"
-                  placeholder="Person name (e.g. Arun)"
+                  placeholder="Name (e.g. Arun)"
                   value={s.person}
                   onChange={(e) => handleUpdateSplit(s.id, 'person', e.target.value)}
                 />
@@ -2477,7 +2472,7 @@ function TransactionModal({
                     type="button"
                     className="split-remove-btn"
                     onClick={() => handleRemoveSplit(s.id)}
-                    title="Remove split"
+                    title="Remove"
                   >
                     <X size={15} />
                   </button>
@@ -2494,26 +2489,59 @@ function TransactionModal({
             <Plus size={14} /> Add another person
           </button>
 
-          {/* Real-time Allocation Validation Pill */}
+          {/* Auto-calculated "Your share" display — read-only, derived not entered */}
+          <div className="split-my-share-display">
+            <div className="split-my-share-row">
+              <div>
+                <span className="split-my-share-label">Your share</span>
+                <small>automatically calculated · counts toward your budget</small>
+              </div>
+              <motion.span
+                key={derivedMyShare.toFixed(2)}
+                initial={{ opacity: 0.6, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                className={`split-my-share-amount ${isSplitOverAllocated ? 'error' : derivedMyShare === 0 && totalAmt > 0 ? 'zero' : ''}`}
+              >
+                {currencySymbol}{derivedMyShare.toFixed(2)}
+              </motion.span>
+            </div>
+            <div className="split-my-share-bar">
+              <motion.div
+                className={`split-my-share-fill ${isSplitOverAllocated ? 'error' : ''}`}
+                initial={{ width: 0 }}
+                animate={{ width: totalAmt > 0 ? `${Math.min(100, (derivedMyShare / totalAmt) * 100)}%` : '0%' }}
+                transition={{ type: 'spring', stiffness: 180, damping: 28 }}
+              />
+            </div>
+          </div>
+
+          {/* Validation status */}
           <div
             className={`split-status ${
-              isSplitBalanced
-                ? 'allocated'
-                : remainingToAllocate > 0
+              isSplitOverAllocated
+                ? 'error'
+                : derivedMyShare === 0 && totalAmt > 0 && !isSplitOverAllocated
                 ? 'unallocated'
-                : 'error'
+                : totalAmt > 0 && splits.some(s => s.person.trim() && (Number(s.amount) || 0) > 0)
+                ? 'allocated'
+                : 'unallocated'
             }`}
           >
-            {isSplitBalanced ? (
-              <span>✓ Fully split — {currencySymbol}{totalAmt} assigned across all people</span>
-            ) : remainingToAllocate > 0 ? (
+            {isSplitOverAllocated ? (
               <span>
-                {currencySymbol}{totalAllocated.toFixed(2)} assigned · {currencySymbol}{remainingToAllocate.toFixed(2)} still unassigned
+                Friends' shares ({currencySymbol}{sumFriendShares.toFixed(2)}) exceed total ({currencySymbol}{totalAmt}) — reduce someone's amount
+              </span>
+            ) : derivedMyShare === 0 && totalAmt > 0 ? (
+              <span>
+                Friends are sharing the full {currencySymbol}{totalAmt} · your budget impact is ₹0
+              </span>
+            ) : totalAmt > 0 ? (
+              <span>
+                ✓ You pay {currencySymbol}{derivedMyShare.toFixed(2)} · friends owe {currencySymbol}{sumFriendShares.toFixed(2)}
               </span>
             ) : (
-              <span>
-                Over by {currencySymbol}{Math.abs(remainingToAllocate).toFixed(2)} — reduce someone's share
-              </span>
+              <span>Enter a total amount above first</span>
             )}
           </div>
         </motion.div>

@@ -726,3 +726,65 @@ input:-webkit-autofill:active{
 
 .split-user-row small{display:block;font-size:10px;color:var(--muted);margin-top:2px}
 .split-builder-header{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+
+/* ── Split Builder — Auto-calculated your share ────────────────────── */
+.split-builder-header p { margin: 0; }
+
+.split-my-share-display {
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.split-my-share-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.split-my-share-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  display: block;
+}
+
+.split-my-share-display small {
+  font-size: 10px;
+  color: var(--muted);
+  display: block;
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+.split-my-share-amount {
+  font-size: 18px;
+  font-weight: 700;
+  font-family: var(--font);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.split-my-share-amount.error { color: var(--negative); }
+.split-my-share-amount.zero  { color: var(--muted); }
+
+.split-my-share-bar {
+  height: 4px;
+  background: var(--border);
+  border-radius: 100px;
+  overflow: hidden;
+}
+
+.split-my-share-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 100px;
+  will-change: width;
+}
+.split-my-share-fill.error { background: var(--negative); }
