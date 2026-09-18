@@ -526,6 +526,40 @@ function App() {
     setToast(`Marked ${formatMoney(amountToConvert, data.settings.currency)} as personal expense`)
   }
 
+  // Inline repayment — saves directly, no extra modal needed
+  const inlineRecordRepayment = (details: {
+    person: string
+    amount: number
+    splitId?: string
+    originatingTxId?: string
+  }) => {
+    const now = new Date().toISOString()
+    const dateStr = new Date().toISOString().split('T')[0]
+    const repaymentTx: Transaction = {
+      id: newId(),
+      type: 'income',
+      category: 'Friend Repayment',
+      amount: details.amount,
+      description: `Repayment from ${details.person}`,
+      date: dateStr,
+      account: data.settings.defaultAccount || '',
+      notes: '',
+      recurring: false,
+      createdAt: now,
+      updatedAt: now,
+      repaymentFor: {
+        person: details.person,
+        originatingTxId: details.originatingTxId,
+        splitId: details.splitId,
+      }
+    }
+    const nextTransactions = [repaymentTx, ...data.transactions]
+    const next = { ...data, transactions: nextTransactions }
+    save(next)
+    cloudSync.syncTransaction('CREATE', repaymentTx, currentUser)
+    setToast(`₹${details.amount} from ${details.person} recorded`)
+  }
+
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null)
   const askConfirm = (opts: Omit<ConfirmDialogState, 'onCancel'> & { onCancel?: () => void }) => {
     setConfirmDialog({
@@ -876,14 +910,7 @@ function App() {
             transactions={data.transactions}
             currency={data.settings.currency}
             close={() => setModal(null)}
-            onRecordRepayment={(details) => {
-              setModal({
-                mode: 'transaction',
-                type: 'income',
-                category: 'Friend Repayment',
-                repaymentFor: details
-              })
-            }}
+            onRecordRepayment={inlineRecordRepayment}
             onMarkAsMyExpense={markAsMyExpense}
           />
         )}

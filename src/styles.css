@@ -788,3 +788,58 @@ input:-webkit-autofill:active{
   will-change: width;
 }
 .split-my-share-fill.error { background: var(--negative); }
+
+/* ── MoneyOwedModal ──────────────────────────────────────────── */
+.modal-money-owed { width: min(520px, 96vw); }
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.modal-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.modal-body { padding: 20px; }
+
+.btn { 
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 11px 18px; border-radius: var(--radius-sm);
+  font-family: var(--font); font-weight: 600; font-size: 14px;
+  border: none; cursor: pointer; transition: opacity 0.12s;
+}
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-primary {
+  background: var(--accent); color: #fff;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.btn-secondary {
+  background: var(--surface-soft);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+}
+
+.btn-icon {
+  width: 34px; height: 34px;
+  display: grid; place-items: center;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer; color: var(--text-2);
+  flex-shrink: 0;
+}
+
+.text-xs { font-size: 11px; }
+.text-muted { color: var(--muted); }
+.text-accent { color: var(--accent); }
+.font-semibold { font-weight: 600; }
