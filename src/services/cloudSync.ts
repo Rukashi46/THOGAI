@@ -1,6 +1,6 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { idbStorage, type QueuedSync } from './idb'
-import { storage, type Budget, type FinanceData, type ReconciliationRecord, type Settings, type Transaction, type SplitShare } from './storage'
+import { storage, type Budget, type FinanceData, type ReconciliationRecord, type Settings, type Transaction } from './storage'
 import type { AuthUser } from './auth'
 
 export type SyncState = 'idle' | 'syncing' | 'synced' | 'offline' | 'error'
@@ -11,10 +11,7 @@ const META_TAG_SUFFIX = '-->'
 export function encodeTransactionNotes(tx: Transaction): string {
   const baseNotes = (tx.notes || '').replace(/<!--thogai-meta:.*?-->/gs, '').trim()
   const meta: Record<string, any> = {}
-  if (tx.paidFor) meta.paidFor = tx.paidFor
-  if (tx.myShare !== undefined) meta.myShare = tx.myShare
-  if (tx.splits && tx.splits.length > 0) meta.splits = tx.splits
-  if (tx.repaymentFor) meta.repaymentFor = tx.repaymentFor
+  if (tx.personalShare !== undefined) meta.personalShare = tx.personalShare
 
   if (Object.keys(meta).length === 0) {
     return baseNotes
@@ -25,10 +22,7 @@ export function encodeTransactionNotes(tx: Transaction): string {
 
 export function decodeTransactionNotes(rawNotes: string = ''): {
   notes: string
-  paidFor?: 'myself' | 'others'
-  myShare?: number
-  splits?: SplitShare[]
-  repaymentFor?: { person: string; splitId?: string; originatingTxId?: string }
+  personalShare?: number
 } {
   const match = rawNotes.match(/<!--thogai-meta:(.*?)-->/s)
   const cleanNotes = rawNotes.replace(/<!--thogai-meta:.*?-->/gs, '').trim()
@@ -39,10 +33,7 @@ export function decodeTransactionNotes(rawNotes: string = ''): {
     const meta = JSON.parse(match[1])
     return {
       notes: cleanNotes,
-      paidFor: meta.paidFor,
-      myShare: meta.myShare,
-      splits: meta.splits,
-      repaymentFor: meta.repaymentFor
+      personalShare: typeof meta.personalShare === 'number' ? meta.personalShare : undefined
     }
   } catch {
     return { notes: cleanNotes }
@@ -142,10 +133,7 @@ class CloudSyncService {
           description: t.description || '',
           date: t.date,
           notes: decoded.notes,
-          paidFor: decoded.paidFor,
-          myShare: decoded.myShare,
-          splits: decoded.splits,
-          repaymentFor: decoded.repaymentFor,
+          personalShare: decoded.personalShare,
           recurring: Boolean(t.recurring),
           createdAt: t.created_at,
           updatedAt: t.updated_at

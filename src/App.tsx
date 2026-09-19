@@ -45,8 +45,7 @@ import { parseStatement } from './services/statementParser'
 import { ReconciliationModal } from './components/ReconciliationModal'
 import { ReconciliationHistoryModal } from './components/ReconciliationHistoryModal'
 import { OnboardingModal } from './components/OnboardingModal'
-import { MoneyOwedModal } from './components/MoneyOwedModal'
-import { getOutstandingReceivables, normalizePersonName, getCashFlowAmount, getPersonalExpenseAmount, getEarnedIncomeAmount } from './lib/finance'
+import { getCashFlowAmount, getPersonalExpenseAmount, getEarnedIncomeAmount } from './lib/finance'
 
 type Page = 'home'|'ledger'|'budget'|'stats'|'config'
 type ModalState =
@@ -62,7 +61,6 @@ type ModalState =
         originatingTxId?: string
       }
     }
-  | { mode: 'money_owed' }
   | { mode: 'budget'; draft?: Budget }
   | { mode: 'ai' }
   | { mode: 'pin_setup'; nextAction?: 'appLock' | 'biometricLock' | 'changePin' }
@@ -505,60 +503,7 @@ function App() {
     setToast(id ? 'Transaction updated' : 'Transaction added')
   }
 
-  const markAsMyExpense = (txId: string, splitId: string, amountToConvert: number) => {
-    const tx = data.transactions.find((t) => t.id === txId)
-    if (!tx || !tx.splits) return
-    const updatedSplits = tx.splits.map((s) => {
-      if (s.id === splitId) {
-        return {
-          ...s,
-          convertedToMyExpense: (s.convertedToMyExpense || 0) + amountToConvert
-        }
-      }
-      return s
-    })
-    const updatedTx: Transaction = {
-      ...tx,
-      splits: updatedSplits,
-      updatedAt: new Date().toISOString()
-    }
-    saveTransaction(updatedTx, tx.id)
-    setToast(`Marked ${formatMoney(amountToConvert, data.settings.currency)} as personal expense`)
-  }
 
-  // Inline repayment — saves directly, no extra modal needed
-  const inlineRecordRepayment = (details: {
-    person: string
-    amount: number
-    splitId?: string
-    originatingTxId?: string
-  }) => {
-    const now = new Date().toISOString()
-    const dateStr = new Date().toISOString().split('T')[0]
-    const repaymentTx: Transaction = {
-      id: newId(),
-      type: 'income',
-      category: 'Friend Repayment',
-      amount: details.amount,
-      description: `Repayment from ${details.person}`,
-      date: dateStr,
-      account: data.settings.defaultAccount || '',
-      notes: '',
-      recurring: false,
-      createdAt: now,
-      updatedAt: now,
-      repaymentFor: {
-        person: details.person,
-        originatingTxId: details.originatingTxId,
-        splitId: details.splitId,
-      }
-    }
-    const nextTransactions = [repaymentTx, ...data.transactions]
-    const next = { ...data, transactions: nextTransactions }
-    save(next)
-    cloudSync.syncTransaction('CREATE', repaymentTx, currentUser)
-    setToast(`₹${details.amount} from ${details.person} recorded`)
-  }
 
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null)
   const askConfirm = (opts: Omit<ConfirmDialogState, 'onCancel'> & { onCancel?: () => void }) => {
@@ -826,7 +771,7 @@ function App() {
                 open={open}
                 remove={deleteTransaction}
                 onReconcile={() => setModal({ mode: 'reconcile' })}
-                onOpenMoneyOwed={() => setModal({ mode: 'money_owed' })}
+                
               />
             )}
             {page === 'budget' && (
@@ -905,15 +850,7 @@ function App() {
             submit={saveTransaction}
           />
         )}
-        {modal?.mode === 'money_owed' && (
-          <MoneyOwedModal
-            transactions={data.transactions}
-            currency={data.settings.currency}
-            close={() => setModal(null)}
-            onRecordRepayment={inlineRecordRepayment}
-            onMarkAsMyExpense={markAsMyExpense}
-          />
-        )}
+
         {modal?.mode === 'budget' && (
           <BudgetModal
             initial={modal.draft}
@@ -1068,7 +1005,6 @@ function Ledger({
   open,
   remove,
   onReconcile,
-  onOpenMoneyOwed
 }: {
   transactions: Transaction[]
   currency: string
@@ -1076,17 +1012,12 @@ function Ledger({
   open: (t?: TransactionType, c?: string, d?: Transaction) => void
   remove: (id: string) => void
   onReconcile: () => void
-  onOpenMoneyOwed: () => void
 }) {
   const [query, setQuery] = useState('')
   const [type, setType] = useState<'all' | TransactionType>('all')
   const [category, setCategory] = useState('all')
 
-  const receivables = useMemo(() => getOutstandingReceivables(transactions), [transactions])
-  const totalReceivables = useMemo(
-    () => receivables.reduce((sum, r) => sum + r.totalOwed, 0),
-    [receivables]
-  )
+
 
   // Date filter state: 'all' | 'today' | 'yesterday' | 'specific' | 'range' | 'YYYY-MM'
   const [dateFilter, setDateFilter] = useState('all')
@@ -1197,31 +1128,7 @@ function Ledger({
         </button>
       </div>
 
-      {/* Money Owed summary banner */}
-      {receivables.length > 0 && (
-        <div className="money-owed-banner">
-          <div className="owed-banner-left">
-            <div className="owed-icon-circle">
-              <Users size={18} />
-            </div>
-            <div>
-              <div className="text-2xs text-muted font-medium">Money owed to you</div>
-              <div className="text-sm font-bold text-accent">
-                {formatMoney(totalReceivables, currency)} · {receivables.length}{' '}
-                {receivables.length === 1 ? 'person' : 'people'}
-              </div>
-            </div>
-          </div>
-          <button
-            type="button"
-            className="button compact secondary"
-            onClick={onOpenMoneyOwed}
-          >
-            View details
-          </button>
-        </div>
-      )}
-
+      {/* Ledger tools */}
       <div className="ledger-tools">
         <label className="search">
           <Search size={18} />
@@ -1347,7 +1254,7 @@ function TransactionRow({
   onClick?: () => void
 }) {
   const I = tx.type === 'income' ? ArrowDownLeft : tx.type === 'due' ? Landmark : categoryIcons[tx.category] ?? ReceiptText
-  const isSplit = tx.paidFor === 'others' && Array.isArray(tx.splits) && tx.splits.length > 0
+  const hasPersonalShare = tx.personalShare !== undefined && tx.personalShare < tx.amount
   const isRepayment = tx.type === 'income' && tx.category === 'Friend Repayment'
 
   return (
@@ -1368,11 +1275,10 @@ function TransactionRow({
         <span>
           {tx.category}
           {tx.account ? ` · ${tx.account}` : ''}
-          {isRepayment && tx.repaymentFor?.person ? ` · From ${tx.repaymentFor.person}` : ''}
-          {isSplit && ` · Split with ${tx.splits!.map((s) => s.person).filter(Boolean).join(', ')}`}
-          {isSplit && tx.myShare !== undefined && (
+          {isRepayment ? ' · Repayment' : ''}
+          {hasPersonalShare && (
             <span style={{ display: 'block', fontSize: 10, color: 'var(--muted)', marginTop: 1 }}>
-              Your share: {formatMoney(tx.myShare, currency)}
+              Your share: {formatMoney(tx.personalShare!, currency)}
             </span>
           )}
           {tx.recurring ? ' · Recurring' : ''}
@@ -1383,12 +1289,9 @@ function TransactionRow({
         <strong>
           {tx.type === 'income' ? '+' : '−'} {formatMoney(tx.amount, currency)}
         </strong>
-        {isSplit ? (
-          <span title={isSplit ? `Paid out: ${formatMoney(tx.amount, currency)} · Your share: ${formatMoney(tx.myShare ?? tx.amount, currency)}` : undefined}>
-            {isSplit
-              ? formatMoney(tx.myShare ?? tx.amount, currency)
-              : formatMoney(tx.amount, currency)
-            }
+        {hasPersonalShare ? (
+          <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+            {formatMoney(tx.personalShare!, currency)} yours
           </span>
         ) : isRepayment ? (
           <span>Repayment</span>
@@ -1672,8 +1575,8 @@ function StatsPage({ data, setPage }: { data: FinanceData; setPage?: (p: Page, d
   const trendData = months.map(m => monthStats(m))
   const barMax = Math.max(...trendData.map(d => Math.max(d.income, d.expenses)), 1)
 
-  const receivables = getOutstandingReceivables(data.transactions)
-  const totalReceivable = receivables.reduce((n, r) => n + r.totalOwed, 0)
+  const receivables: Array<{person: string; totalOwed: number; items: Array<{person: string; date: string; description: string; remainingAmount: number; repaidAmount: number; originalAmount: number}>}> = []
+  const totalReceivable = 0
 
   const handleMonthSelect = (m: string) => {
     const oldIdx = months.indexOf(selected); const newIdx = months.indexOf(m)
@@ -2216,68 +2119,38 @@ function TransactionModal({
   })
 
   // Paid for others state
-  const [paidFor, setPaidFor] = useState<'myself' | 'others'>(initial?.paidFor ?? 'myself')
-  const [myShare, setMyShare] = useState<string>(() => {
-    // When editing an existing split transaction, restore myShare
-    if (initial?.myShare !== undefined && initial.paidFor === 'others') return String(initial.myShare)
-    // When creating new — leave blank so user consciously enters their share
+  // personalShare: how much of this expense is yours
+  // undefined = full amount is yours; a number = your actual share
+  const [personalShare, setPersonalShare] = useState<string>(() => {
+    if (initial?.personalShare !== undefined) return String(initial.personalShare)
     return ''
   })
-  const [splits, setSplits] = useState<Array<{ id: string; person: string; amount: number; convertedToMyExpense?: number }>>(() => {
-    if (initial?.splits && initial.splits.length > 0) {
-      return initial.splits.map((s) => ({ ...s }))
-    }
-    return [{ id: newId(), person: '', amount: 0 }]
+  const [showShareField, setShowShareField] = useState<boolean>(() => {
+    return initial?.personalShare !== undefined
   })
 
-  // Repayment state
+  // Repayment state — for income repayment prefill only
   const [repPerson, setRepPerson] = useState<string>(
-    initial?.repaymentFor?.person ?? repaymentFor?.person ?? ''
+    repaymentFor?.person ?? ''
   )
-  const [repSplitId] = useState<string | undefined>(
-    initial?.repaymentFor?.splitId ?? repaymentFor?.splitId
-  )
-  const [repOriginatingTxId] = useState<string | undefined>(
-    initial?.repaymentFor?.originatingTxId ?? repaymentFor?.originatingTxId
-  )
-  const [repOwedAmount] = useState<number | undefined>(repaymentFor?.amount)
 
   const [error, setError] = useState('')
 
-  // Gather known people suggestions
+  // knownPeople from notes/descriptions (simplified — no longer from splits)
   const knownPeople = useMemo(() => {
-    const map = new Map<string, string>()
+    const names = new Set<string>()
     allTransactions.forEach((t) => {
-      if (t.splits) {
-        t.splits.forEach((s) => {
-          const trimmed = (s.person || '').trim()
-          if (trimmed) {
-            const k = normalizePersonName(trimmed)
-            if (!map.has(k)) map.set(k, trimmed)
-          }
-        })
-      }
-      if (t.repaymentFor?.person) {
-        const trimmed = t.repaymentFor.person.trim()
-        if (trimmed) {
-          const k = normalizePersonName(trimmed)
-          if (!map.has(k)) map.set(k, trimmed)
-        }
+      if (t.notes) {
+        const words = t.notes.split(/[\s,]+/).filter(w => w.length > 1 && /^[A-Z]/.test(w))
+        words.forEach(w => names.add(w))
       }
     })
-    return Array.from(map.values())
+    return Array.from(names).sort()
   }, [allTransactions])
 
-  // Split calculations — myShare is derived: total minus what friends owe
-  // User never types their own share — it's calculated automatically
   const totalAmt = Number(form.amount) || 0
-  const sumFriendShares = splits.reduce((acc, s) => acc + (Number(s.amount) || 0), 0)
-  const derivedMyShare = Math.max(0, totalAmt - sumFriendShares)
-  const isSplitOverAllocated = sumFriendShares > totalAmt + 0.01
-  const isSplitBalanced = !isSplitOverAllocated && splits.length > 0 && totalAmt > 0 && splits.every(s => s.person.trim() && (Number(s.amount) || 0) > 0)
-  // For backward compat — keep userShareAmt for submit handler
-  const userShareAmt = derivedMyShare
   const currencySymbol = currencies.find((c) => c.code === currency)?.symbol ?? '₹'
+  const resolvedPersonalShare = showShareField && personalShare !== '' ? Math.min(totalAmt, Math.max(0, Number(personalShare) || 0)) : undefined
 
   const handleTypeChange = (t: TransactionType) => {
     const nextCats = t === 'income' ? incomeCats : expenseCats
@@ -2287,84 +2160,37 @@ function TransactionModal({
       category: nextCats.includes(p.category) ? p.category : (nextCats[0] || 'Other')
     }))
     if (t !== 'expense') {
-      setPaidFor('myself')
+      setShowShareField(false)
+      setPersonalShare('')
     }
   }
 
   const change = (key: string, value: string | boolean) => setForm((p) => ({ ...p, [key]: value }))
 
-  const handleAddSplit = () => {
-    setSplits([...splits, { id: newId(), person: '', amount: 0 }])
-  }
 
-  const handleUpdateSplit = (id: string, field: 'person' | 'amount', val: string) => {
-    setSplits(
-      splits.map((s) => {
-        if (s.id !== id) return s
-        if (field === 'person') return { ...s, person: val }
-        return { ...s, amount: Math.max(0, Number(val) || 0) }
-      })
-    )
-  }
 
-  const handleRemoveSplit = (id: string) => {
-    if (splits.length <= 1) return
-    setSplits(splits.filter((s) => s.id !== id))
-  }
+
+
 
   const save = () => {
     const amount = Number(form.amount)
     if (!Number.isFinite(amount) || amount <= 0) return setError('Enter an amount greater than zero.')
     if (!form.category) return setError('Choose a category.')
 
-    if (form.type === 'expense' && paidFor === 'others') {
-      if (splits.length === 0) return setError('Add at least one person you paid for.')
-      for (const s of splits) {
-        if (!s.person.trim()) return setError('Please enter a name for everyone in the split.')
-        if (!s.amount || s.amount <= 0) return setError(`Enter a valid amount for ${s.person || 'each person'}.`)
-      }
-      if (isSplitOverAllocated) {
-        return setError(`Friends' shares (${currencySymbol}${sumFriendShares.toFixed(2)}) exceed the total (${currencySymbol}${totalAmt}). Reduce someone's amount.`)
-      }
-      if (derivedMyShare < 0) {
-        return setError('Your share cannot be negative. Check the amounts.')
-      }
-      submit(
-        {
-          ...form,
-          amount,
-          paidFor: 'others',
-          myShare: derivedMyShare,
-          splits: splits.map((s) => ({
-            id: s.id,
-            person: s.person.trim(),
-            amount: Number(s.amount) || 0,
-            convertedToMyExpense: s.convertedToMyExpense
-          }))
-        },
-        initial?.id
-      )
-      return
+    // Validate personalShare if set
+    if (form.type === 'expense' && showShareField && personalShare !== '') {
+      const share = Number(personalShare)
+      if (isNaN(share) || share < 0) return setError('Enter a valid amount for your share.')
+      if (share > amount) return setError(`Your share (${currencySymbol}${share}) cannot exceed the total (${currencySymbol}${amount}).`)
     }
 
     if (form.type === 'income' && form.category === 'Friend Repayment') {
       if (!repPerson.trim()) return setError('Please specify who made the repayment.')
-      submit(
-        {
-          ...form,
-          amount,
-          repaymentFor: {
-            person: repPerson.trim(),
-            splitId: repSplitId,
-            originatingTxId: repOriginatingTxId
-          }
-        },
-        initial?.id
-      )
+      submit({ ...form, amount }, initial?.id)
       return
     }
 
-    submit({ ...form, amount, paidFor: 'myself' }, initial?.id)
+    submit({ ...form, amount, personalShare: resolvedPersonalShare }, initial?.id)
   }
 
   const currentCats = form.type === 'income' ? incomeCats : expenseCats
@@ -2403,11 +2229,7 @@ function TransactionModal({
             step="0.01"
             value={form.amount}
             onChange={(e) => {
-              const val = e.target.value
-              change('amount', val)
-              if (paidFor === 'others' && !myShare) {
-                setMyShare(val)
-              }
+              change('amount', e.target.value)
             }}
             placeholder="0"
           />
@@ -2415,163 +2237,119 @@ function TransactionModal({
       </label>
 
       {/* Paid for: Myself vs Someone else (for expenses) */}
+      {/* My share — optional field for group expenses */}
       {form.type === 'expense' && (
-        <div className="form-group mb-3">
-          <label>
-            Paid for
-            <ThemedSelect
-              compact
-              value={paidFor}
-              onChange={(v) => {
-                const next = v as 'myself' | 'others'
-                setPaidFor(next)
-                // Don't pre-fill myShare — it's now auto-derived from total minus friends
-              }}
-              options={[
-                { value: 'myself', label: 'Myself' },
-                { value: 'others', label: 'Someone else' }
-              ]}
-            />
-          </label>
-        </div>
-      )}
-
-      {/* Progressive split builder when Paid for Someone else */}
-      {form.type === 'expense' && paidFor === 'others' && (
-        <motion.div
-          className="split-builder-section"
-          variants={splitPanelVariants}
-          initial="initial"
-          animate="animate"
-          exit="exit"
-          style={{ transformOrigin: 'top center', overflow: 'hidden' }}
-        >
-          {/* Header with equal-split helper */}
-          <div className="split-builder-header">
-            <div>
-              <strong>Who did you pay for?</strong>
-              <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--muted)', lineHeight: 1.4 }}>
-                Enter each person's share. Your portion is calculated automatically.
-              </p>
+        <div className="form-group">
+          <div className="personal-share-toggle" onClick={() => {
+            setShowShareField(v => !v)
+            if (showShareField) setPersonalShare('')
+          }}>
+            <div className="personal-share-toggle-left">
+              <div className="personal-share-icon">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                  <circle cx="9" cy="7" r="4"/>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+              </div>
+              <div>
+                <span className="personal-share-toggle-label">Group / shared expense?</span>
+                <small className="personal-share-toggle-hint">
+                  {showShareField
+                    ? 'Your budget will only count your share below'
+                    : 'Tap to enter only your portion of this expense'}
+                </small>
+              </div>
             </div>
-            <button
-              type="button"
-              className="button compact secondary"
-              style={{ fontSize: 11, padding: '3px 10px', height: 'auto', flexShrink: 0 }}
-              onClick={() => {
-                // Split equally: divide total among all friends evenly
-                // My share = total - sum(friends), so we just set each friend equally
-                const total = Number(form.amount) || 0
-                const numFriends = splits.length
-                if (numFriends === 0) return
-                const each = Math.floor((total / (numFriends + 1)) * 100) / 100
-                setSplits(splits.map(s => ({ ...s, amount: each })))
-              }}
-              title="Split total equally among everyone including you"
-            >
-              Split equally
-            </button>
+            <div className={`toggle ${showShareField ? 'on' : ''}`}>
+              <i />
+            </div>
           </div>
 
-          {/* Friend rows — only friends, no "You" input row */}
-          <div className="space-y-2">
-            {splits.map((s) => (
-              <div key={s.id} className="split-person-row">
-                <input
-                  list="datalist-known-people"
-                  placeholder="Name (e.g. Arun)"
-                  value={s.person}
-                  onChange={(e) => handleUpdateSplit(s.id, 'person', e.target.value)}
-                />
-                <div className="input-with-currency">
-                  <span className="input-prefix">{currencySymbol}</span>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
-                    placeholder="0"
-                    value={s.amount || ''}
-                    onChange={(e) => handleUpdateSplit(s.id, 'amount', e.target.value)}
-                  />
+          {showShareField && (
+            <motion.div
+              className="personal-share-input-wrap"
+              variants={splitPanelVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              style={{ transformOrigin: 'top center', overflow: 'hidden' }}
+            >
+              <div className="personal-share-input-body">
+                <div className="personal-share-input-row">
+                  <div className="input-with-currency">
+                    <span className="input-prefix">{currencySymbol}</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="any"
+                      min="0"
+                      max={totalAmt || undefined}
+                      placeholder="Your share"
+                      value={personalShare}
+                      onChange={e => setPersonalShare(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+                  {totalAmt > 0 && (
+                    <div className="personal-share-presets">
+                      {[25, 50].map(pct => {
+                        const amt = Math.round(totalAmt * pct / 100 * 100) / 100
+                        return (
+                          <motion.button
+                            key={pct}
+                            type="button"
+                            whileTap={buttonTap}
+                            onClick={() => setPersonalShare(String(amt))}
+                            className={`personal-share-preset-btn ${Number(personalShare) === amt ? 'active' : ''}`}
+                          >
+                            {pct}%
+                          </motion.button>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
-                {splits.length > 1 && (
-                  <button
-                    type="button"
-                    className="split-remove-btn"
-                    onClick={() => handleRemoveSplit(s.id)}
-                    title="Remove"
-                  >
-                    <X size={15} />
-                  </button>
+
+                {/* Live preview */}
+                {totalAmt > 0 && personalShare !== '' && (
+                  <div className="personal-share-preview">
+                    <div className="personal-share-preview-row">
+                      <span>Your budget impact</span>
+                      <motion.strong
+                        key={resolvedPersonalShare}
+                        initial={{ opacity: 0.5, y: -3 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                        className="personal-share-preview-amount"
+                        style={{
+                          color: (resolvedPersonalShare ?? totalAmt) === 0 ? 'var(--muted)' : 'var(--accent)'
+                        }}
+                      >
+                        {currencySymbol}{(resolvedPersonalShare ?? totalAmt).toFixed(2)}
+                      </motion.strong>
+                    </div>
+                    <div className="personal-share-preview-row secondary">
+                      <span>Cash out of account</span>
+                      <span>{currencySymbol}{totalAmt.toFixed(2)}</span>
+                    </div>
+                    {totalAmt > 0 && resolvedPersonalShare !== undefined && resolvedPersonalShare < totalAmt && (
+                      <p className="personal-share-preview-note">
+                        The {currencySymbol}{(totalAmt - resolvedPersonalShare).toFixed(2)} difference was paid for others — it affects your balance but not your budget.
+                      </p>
+                    )}
+                    {resolvedPersonalShare !== undefined && resolvedPersonalShare >= totalAmt && (
+                      <p className="personal-share-preview-note warning">
+                        Your share equals or exceeds the total — consider leaving this field blank.
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
-            ))}
-          </div>
-
-          <button
-            type="button"
-            className="button compact secondary self-start flex items-center gap-1 mt-1"
-            onClick={handleAddSplit}
-          >
-            <Plus size={14} /> Add another person
-          </button>
-
-          {/* Auto-calculated "Your share" display — read-only, derived not entered */}
-          <div className="split-my-share-display">
-            <div className="split-my-share-row">
-              <div>
-                <span className="split-my-share-label">Your share</span>
-                <small>automatically calculated · counts toward your budget</small>
-              </div>
-              <motion.span
-                key={derivedMyShare.toFixed(2)}
-                initial={{ opacity: 0.6, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                className={`split-my-share-amount ${isSplitOverAllocated ? 'error' : derivedMyShare === 0 && totalAmt > 0 ? 'zero' : ''}`}
-              >
-                {currencySymbol}{derivedMyShare.toFixed(2)}
-              </motion.span>
-            </div>
-            <div className="split-my-share-bar">
-              <motion.div
-                className={`split-my-share-fill ${isSplitOverAllocated ? 'error' : ''}`}
-                initial={{ width: 0 }}
-                animate={{ width: totalAmt > 0 ? `${Math.min(100, (derivedMyShare / totalAmt) * 100)}%` : '0%' }}
-                transition={{ type: 'spring', stiffness: 180, damping: 28 }}
-              />
-            </div>
-          </div>
-
-          {/* Validation status */}
-          <div
-            className={`split-status ${
-              isSplitOverAllocated
-                ? 'error'
-                : derivedMyShare === 0 && totalAmt > 0 && !isSplitOverAllocated
-                ? 'unallocated'
-                : totalAmt > 0 && splits.some(s => s.person.trim() && (Number(s.amount) || 0) > 0)
-                ? 'allocated'
-                : 'unallocated'
-            }`}
-          >
-            {isSplitOverAllocated ? (
-              <span>
-                Friends' shares ({currencySymbol}{sumFriendShares.toFixed(2)}) exceed total ({currencySymbol}{totalAmt}) — reduce someone's amount
-              </span>
-            ) : derivedMyShare === 0 && totalAmt > 0 ? (
-              <span>
-                Friends are sharing the full {currencySymbol}{totalAmt} · your budget impact is ₹0
-              </span>
-            ) : totalAmt > 0 ? (
-              <span>
-                ✓ You pay {currencySymbol}{derivedMyShare.toFixed(2)} · friends owe {currencySymbol}{sumFriendShares.toFixed(2)}
-              </span>
-            ) : (
-              <span>Enter a total amount above first</span>
-            )}
-          </div>
-        </motion.div>
+            </motion.div>
+          )}
+        </div>
       )}
 
       {/* Friend Repayment details (for income) */}
@@ -2579,11 +2357,7 @@ function TransactionModal({
         <div className="split-builder-section mb-3">
           <div className="split-builder-header">
             <strong>Repayment Details</strong>
-            {repOwedAmount !== undefined && (
-              <span className="text-accent font-semibold">
-                Owed: {currencySymbol}{repOwedAmount}
-              </span>
-            )}
+            <span className="text-accent font-semibold"></span>
           </div>
           <label>
             Repaid by

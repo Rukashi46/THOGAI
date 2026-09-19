@@ -675,20 +675,20 @@ input:-webkit-autofill:active{
 /* ==========================================================================
    Paid for Others / Split Builder / Money Owed Styling
    ========================================================================== */
-.split-builder-section{margin-top:14px;padding:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface-soft);display:flex;flex-direction:column;gap:12px}
-.split-builder-header{display:flex;justify-content:space-between;align-items:center}
-.split-builder-header strong{font-size:13px;font-weight:700}
-.split-builder-header span{font-size:11.5px;color:var(--muted)}
-.split-user-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:center;background:var(--surface);padding:8px 12px;border:1px solid var(--border);border-radius:10px}
-.split-user-row span{font-size:13px;font-weight:600;color:var(--text)}
-.split-person-row{display:grid;grid-template-columns:1fr 110px 32px;gap:8px;align-items:center}
-.split-person-row input{min-height:38px!important}
-.split-remove-btn{width:32px;height:38px;display:grid;place-items:center;border:0;background:transparent;color:var(--muted);cursor:pointer;border-radius:8px;transition:.15s}
-.split-remove-btn:hover{color:var(--negative);background:rgba(255,142,128,.18)}
-.split-status{padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:space-between}
-.split-status.allocated{background:color-mix(in srgb,var(--positive) 15%,transparent);color:var(--positive);border:1px solid color-mix(in srgb,var(--positive) 30%,transparent)}
-.split-status.unallocated{background:color-mix(in srgb,var(--warning) 15%,transparent);color:var(--warning);border:1px solid color-mix(in srgb,var(--warning) 30%,transparent)}
-.split-status.error{background:color-mix(in srgb,var(--negative) 15%,transparent);color:var(--negative);border:1px solid color-mix(in srgb,var(--negative) 30%,transparent)}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /* Money Owed Ledger Banner */
 .money-owed-banner{margin-bottom:16px;padding:12px 14px;border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));background:color-mix(in srgb,var(--accent) 8%,var(--surface));border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:space-between;gap:12px}
@@ -703,10 +703,10 @@ input:-webkit-autofill:active{
 .input-prefix{font-size:14px;font-weight:700;color:var(--accent)}
 .input-with-currency input{border:0!important;background:transparent!important;padding:8px 0!important}
 
-[data-theme="cream"] .split-builder-section{background:#f6efe3;border-color:rgba(118,87,55,.2)}
+[data-theme="cream"] 
 [data-theme="cream"] .money-owed-banner{background:#fbf6ed;border-color:rgba(118,87,55,.25)}
 [data-theme="cream"] .debt-item-card{box-shadow:3px 3px 8px #d9cab4,-2px -2px 8px #fff8eb}
-[data-theme="amoled"] .split-builder-section{background:#0a0a0a;border-color:#1c1c1c}
+[data-theme="amoled"] 
 [data-theme="amoled"] .money-owed-banner{background:#080808;border-color:#222}
 [data-theme="amoled"] .debt-item-card{background:#060606;border-color:#1a1a1a}
 
@@ -724,70 +724,29 @@ input:-webkit-autofill:active{
 /* Category chart row spacing */
 .category-chart > div { padding: 2px 0; }
 
-.split-user-row small{display:block;font-size:10px;color:var(--muted);margin-top:2px}
-.split-builder-header{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+
+
 
 /* ── Split Builder — Auto-calculated your share ────────────────────── */
 .split-builder-header p { margin: 0; }
 
-.split-my-share-display {
-  margin-top: 14px;
-  padding: 12px 14px;
-  background: var(--surface-soft);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
 
-.split-my-share-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
 
-.split-my-share-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-  display: block;
-}
 
-.split-my-share-display small {
-  font-size: 10px;
-  color: var(--muted);
-  display: block;
-  margin-top: 2px;
-  line-height: 1.4;
-}
 
-.split-my-share-amount {
-  font-size: 18px;
-  font-weight: 700;
-  font-family: var(--font);
-  color: var(--accent);
-  flex-shrink: 0;
-}
 
-.split-my-share-amount.error { color: var(--negative); }
+
+
+
+
+
+
 .split-my-share-amount.zero  { color: var(--muted); }
 
-.split-my-share-bar {
-  height: 4px;
-  background: var(--border);
-  border-radius: 100px;
-  overflow: hidden;
-}
 
-.split-my-share-fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 100px;
-  will-change: width;
-}
-.split-my-share-fill.error { background: var(--negative); }
+
+
+
 
 /* ── MoneyOwedModal ──────────────────────────────────────────── */
 .modal-money-owed { width: min(520px, 96vw); }
@@ -843,3 +802,144 @@ input:-webkit-autofill:active{
 .text-muted { color: var(--muted); }
 .text-accent { color: var(--accent); }
 .font-semibold { font-weight: 600; }
+
+/* ── Personal Share (Group Expense) ─────────────────────────────── */
+.personal-share-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+.personal-share-toggle:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+
+.personal-share-toggle-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.personal-share-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.personal-share-toggle-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.personal-share-toggle-hint {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 1px;
+  line-height: 1.4;
+}
+
+.personal-share-input-wrap {
+  margin-top: 10px;
+}
+
+.personal-share-input-body {
+  padding: 14px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.personal-share-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.personal-share-presets {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.personal-share-preset-btn {
+  padding: 0 12px;
+  height: 42px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font);
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+.personal-share-preset-btn.active,
+.personal-share-preset-btn:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--accent);
+}
+
+.personal-share-preview {
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.personal-share-preview-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.personal-share-preview-row.secondary {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.personal-share-preview-amount {
+  font-size: 14px;
+  font-weight: 700;
+  font-family: var(--font);
+}
+
+.personal-share-preview-note {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 2px 0 0;
+  line-height: 1.5;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+.personal-share-preview-note.warning { color: var(--warning); }
+
+/* Theme overrides */
+[data-theme="cream"] .personal-share-toggle { background: #f6efe3; border-color: rgba(118,87,55,.2); }
+[data-theme="cream"] .personal-share-input-body { background: #f6efe3; border-color: rgba(118,87,55,.2); }
+[data-theme="amoled"] .personal-share-toggle { background: #0a0a0a; border-color: #1c1c1c; }
+[data-theme="amoled"] .personal-share-input-body { background: #0a0a0a; border-color: #1c1c1c; }
