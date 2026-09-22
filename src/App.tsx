@@ -31,6 +31,7 @@ import { cloudSync, type SyncState } from './services/cloudSync'
 import { idbStorage } from './services/idb'
 import { isSupabaseConfigured } from './lib/supabase'
 import { AuthScreen } from './components/AuthScreen'
+import { MoneyOwedModal } from './components/MoneyOwedModal'
 import {
   pageVariants, desktopModalVariants, mobileSheetVariants, backdropVariants,
   buttonTap, primaryButtonTap, reducedMotionVariants, iosSpring, sheetSpring, snapSpring,
@@ -45,7 +46,7 @@ import { parseStatement } from './services/statementParser'
 import { ReconciliationModal } from './components/ReconciliationModal'
 import { ReconciliationHistoryModal } from './components/ReconciliationHistoryModal'
 import { OnboardingModal } from './components/OnboardingModal'
-import { getCashFlowAmount, getPersonalExpenseAmount, getEarnedIncomeAmount } from './lib/finance'
+import { getCashFlowAmount, getPersonalExpenseAmount, getEarnedIncomeAmount, getOutstandingReceivables } from './lib/finance'
 
 type Page = 'home'|'ledger'|'budget'|'stats'|'config'
 type ModalState =
@@ -67,6 +68,7 @@ type ModalState =
   | { mode: 'categories' }
   | { mode: 'accounts' }
   | { mode: 'migration' }
+  | { mode: 'money_owed' }
   | { mode: 'privacy' }
   | { mode: 'terms' }
   | { mode: 'reconcile' }
@@ -477,6 +479,48 @@ function App() {
   const open = (type: TransactionType = 'expense', category?: string, draft?: Transaction) =>
     setModal({ mode: 'transaction', type, category, draft })
   const openAi = () => setModal({ mode: 'ai' })
+  const openMoneyOwed = () => setModal({ mode: 'money_owed' })
+
+  // Mark a split share as absorbed into personal expense
+  const markAsMyExpense = (txId: string, splitId: string, amountToConvert: number) => {
+    const tx = data.transactions.find(t => t.id === txId)
+    if (!tx) return
+    const splits = (tx as any).splits as Array<{ id: string; convertedToMyExpense?: number }> | undefined
+    if (!Array.isArray(splits)) return
+    const updatedSplits = splits.map(s =>
+      s.id === splitId
+        ? { ...s, convertedToMyExpense: (s.convertedToMyExpense || 0) + amountToConvert }
+        : s
+    )
+    const updated = { ...tx, splits: updatedSplits, updatedAt: new Date().toISOString() }
+    const next = { ...data, transactions: data.transactions.map(t => t.id === txId ? updated : t) }
+    save(next)
+    setToast(`Marked ${formatMoney(amountToConvert, data.settings.currency)} as personal expense`)
+  }
+
+  // Record repayment income inline without opening transaction form
+  const inlineRecordRepayment = (details: {
+    person: string; amount: number; splitId?: string; originatingTxId?: string
+  }) => {
+    const now = new Date().toISOString()
+    const repaymentTx: Transaction = {
+      id: newId(),
+      type: 'income',
+      category: 'Friend Repayment',
+      amount: details.amount,
+      description: `Repayment from ${details.person}`,
+      date: now.slice(0, 10),
+      account: data.settings.defaultAccount || 'Cash',
+      notes: '',
+      recurring: false,
+      createdAt: now,
+      updatedAt: now,
+    }
+    const next = { ...data, transactions: [repaymentTx, ...data.transactions] }
+    save(next)
+    cloudSync.syncTransaction('CREATE', repaymentTx, currentUser)
+    setToast(`${formatMoney(details.amount, data.settings.currency)} from ${details.person} recorded`)
+  }
   const lockApp = () => {
     sessionStorage.removeItem('thogai_unlocked')
     setIsLocked(true)
@@ -771,7 +815,7 @@ function App() {
                 open={open}
                 remove={deleteTransaction}
                 onReconcile={() => setModal({ mode: 'reconcile' })}
-                
+                onOpenMoneyOwed={openMoneyOwed}
               />
             )}
             {page === 'budget' && (
@@ -861,6 +905,15 @@ function App() {
           />
         )}
         {modal?.mode === 'ai' && <AiModal data={data} close={() => setModal(null)} />}
+        {modal?.mode === 'money_owed' && (
+          <MoneyOwedModal
+            transactions={data.transactions}
+            currency={data.settings.currency}
+            close={() => setModal(null)}
+            onRecordRepayment={inlineRecordRepayment}
+            onMarkAsMyExpense={markAsMyExpense}
+          />
+        )}
         {modal?.mode === 'pin_setup' && (
           <PinSetupModal
             close={() => setModal(null)}
@@ -1005,6 +1058,7 @@ function Ledger({
   open,
   remove,
   onReconcile,
+  onOpenMoneyOwed,
 }: {
   transactions: Transaction[]
   currency: string
@@ -1012,6 +1066,7 @@ function Ledger({
   open: (t?: TransactionType, c?: string, d?: Transaction) => void
   remove: (id: string) => void
   onReconcile: () => void
+  onOpenMoneyOwed?: () => void
 }) {
   const [query, setQuery] = useState('')
   const [type, setType] = useState<'all' | TransactionType>('all')
@@ -1088,6 +1143,8 @@ function Ledger({
   }, [transactions, query, type, category, dateFilter, specificDate, rangeStart, rangeEnd, todayStr, yesterdayStr])
 
   const groups = groupByDate(filtered)
+  const receivables = getOutstandingReceivables(transactions)
+  const totalReceivable = receivables.reduce((s, r) => s + r.totalOwed, 0)
 
   return (
     <div className="ledger-page">
@@ -1129,6 +1186,22 @@ function Ledger({
       </div>
 
       {/* Ledger tools */}
+      {/* Money Owed Banner */}
+      {totalReceivable > 0 && onOpenMoneyOwed && (
+        <div className="money-owed-banner">
+          <div className="money-owed-banner-left">
+            <Users size={18} />
+            <div>
+              <strong>Money owed to you</strong>
+              <span>{formatMoney(totalReceivable, currency)} · {receivables.length} {receivables.length === 1 ? 'person' : 'people'}</span>
+            </div>
+          </div>
+          <button type="button" className="button compact secondary" onClick={onOpenMoneyOwed}>
+            View details
+          </button>
+        </div>
+      )}
+
       <div className="ledger-tools">
         <label className="search">
           <Search size={18} />
@@ -2555,6 +2628,16 @@ function LockScreen({settings,onUnlock}:{settings:Settings;onUnlock:()=>void}) {
  useEffect(()=>{if(settings.biometricLock)triggerBiometrics()},[]);
  const press=(num:string)=>{if(pin.length>=4)return;const next=pin+num;setPin(next);setError('');if(next.length===4){if(!settings.appLockPin||security.verifyPin(next,settings.appLockPin)){setTimeout(()=>onUnlock(),120)}else{setShake(true);setError('Incorrect PIN');setTimeout(()=>{setShake(false);setPin('')},500)}}};
  const backspace=()=>{setPin(p=>p.slice(0,-1));setError('')};
+ // Keyboard support: digits, Backspace, Delete, Enter
+ useEffect(()=>{
+   const onKey=(e:KeyboardEvent)=>{
+     if(e.metaKey||e.ctrlKey||e.altKey)return;
+     if(/^[0-9]$/.test(e.key)){e.preventDefault();press(e.key)}
+     else if(e.key==='Backspace'||e.key==='Delete'){e.preventDefault();backspace()}
+   };
+   window.addEventListener('keydown',onKey);
+   return ()=>window.removeEventListener('keydown',onKey);
+ },[pin]);
  return <motion.div className="lock-screen" variants={lockScreenVariants} initial="initial" animate="animate" exit="exit"><div className={`lock-box ${shake?'shake':''}`}><div className="lock-shield"><LockKeyhole size={28}/></div><h1 className="lock-title">THOGAI Locked</h1><p className="lock-subtitle">{settings.biometricLock?'Enter PIN or verify biometrics':'Enter 4-digit PIN to continue'}</p><div className="pin-dots">{[0,1,2,3].map(i=><motion.div key={i} className={`pin-dot ${i<pin.length?'filled':''}`} animate={i<pin.length?{scale:[1,1.3,1],transition:{type:'spring',stiffness:600,damping:18,mass:0.5}}:{scale:1}} style={{willChange:'transform'}}/>)}</div>{error&&<p className="form-error" style={{marginBottom:16}}>{error}</p>}<div className="keypad">{['1','2','3','4','5','6','7','8','9'].map(k=><motion.button key={k} type="button" className="key-btn" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={()=>press(k)}>{k}</motion.button>)}{settings.biometricLock?<motion.button type="button" className="key-btn action" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={triggerBiometrics} title="Unlock with biometrics" disabled={checkingBio}><Fingerprint size={26}/></motion.button>:<motion.button type="button" className="key-btn action" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={()=>setPin('')}>Clear</motion.button>}<motion.button type="button" className="key-btn" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={()=>press('0')}>0</motion.button><motion.button type="button" className="key-btn action" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={backspace} title="Backspace"><Delete size={20}/></motion.button></div></div></motion.div>
 }
 
@@ -2562,6 +2645,18 @@ function PinSetupModal({close,onSave}:{close:()=>void;onSave:(pin:string)=>void}
  const [step,setStep]=useState<'create'|'confirm'>('create'); const [pin,setPin]=useState(''); const [firstPin,setFirstPin]=useState(''); const [error,setError]=useState(''); const [shake,setShake]=useState(false);
  const press=(num:string)=>{if(pin.length>=4)return;const next=pin+num;setPin(next);setError('');if(next.length===4){if(step==='create'){setTimeout(()=>{setFirstPin(next);setPin('');setStep('confirm')},180)}else{if(next===firstPin){setTimeout(()=>onSave(next),180)}else{setShake(true);setError('PINs did not match. Try again.');setTimeout(()=>{setShake(false);setPin('');setFirstPin('');setStep('create')},600)}}}};
  const backspace=()=>{setPin(p=>p.slice(0,-1));setError('')};
+ // Keyboard: digit keys, Backspace, Escape
+ useEffect(()=>{
+   const onKey=(e:KeyboardEvent)=>{
+     if(e.metaKey||e.ctrlKey||e.altKey)return;
+     if(/^[0-9]$/.test(e.key)){e.preventDefault();press(e.key)}
+     else if(e.key==='Backspace'||e.key==='Delete'){e.preventDefault();backspace()}
+     else if(e.key==='Escape'){e.preventDefault();close()}
+   };
+   window.addEventListener('keydown',onKey);
+   return ()=>window.removeEventListener('keydown',onKey);
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[pin,step]);
  return <Modal close={close} title={step==='create'?'Set 4-digit PIN':'Confirm 4-digit PIN'}><div className={`lock-box ${shake?'shake':''}`} style={{margin:'8px auto'}}><p className="modal-intro" style={{textAlign:'center',marginBottom:18}}>{step==='create'?'Choose a 4-digit PIN to secure your financial records.':'Re-enter the same 4-digit PIN to confirm.'}</p><div className="pin-dots">{[0,1,2,3].map(i=><motion.div key={i} className={`pin-dot ${i<pin.length?'filled':''}`} animate={i<pin.length?{scale:[1,1.3,1],transition:{type:'spring',stiffness:600,damping:18,mass:0.5}}:{scale:1}} style={{willChange:'transform'}}/>)}</div>{error&&<p className="form-error" style={{marginBottom:14}}>{error}</p>}<div className="keypad">{['1','2','3','4','5','6','7','8','9'].map(k=><motion.button key={k} type="button" className="key-btn" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={()=>press(k)}>{k}</motion.button>)}<motion.button type="button" className="key-btn action" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={()=>setPin('')}>Clear</motion.button><motion.button type="button" className="key-btn" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={()=>press('0')}>0</motion.button><motion.button type="button" className="key-btn action" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={backspace} title="Backspace"><Delete size={20}/></motion.button></div></div></Modal>
 }
 

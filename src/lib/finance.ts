@@ -134,3 +134,125 @@ export const seedBudgets = (categories: string[]): Budget[] => {
   }))
 }
 
+
+// ─── Split share types (for MoneyOwedModal) ───────────────────────────────────
+
+export interface SplitShare {
+  id: string
+  person: string
+  amount: number
+  convertedToMyExpense?: number
+}
+
+export interface DebtItem {
+  txId: string
+  splitId: string
+  person: string
+  date: string
+  description: string
+  category: string
+  originalAmount: number
+  convertedToMyExpense: number
+  repaidAmount: number
+  remainingAmount: number
+}
+
+export interface PersonReceivable {
+  person: string
+  totalOwed: number
+  items: DebtItem[]
+}
+
+export const normalizePersonName = (n: string) => n.trim().toLowerCase()
+
+/**
+ * Derive outstanding receivables from legacy split transactions AND
+ * from any repayments recorded against them.
+ * Works with both the old paidFor/splits model and the new personalShare model.
+ */
+export function getOutstandingReceivables(transactions: Transaction[]): PersonReceivable[] {
+  const allDebts: DebtItem[] = []
+  const displayNames = new Map<string, string>()
+  const sorted = [...transactions].sort(
+    (a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt)
+  )
+
+  // Gather debts from legacy split transactions (paidFor=others with splits array)
+  sorted.forEach(t => {
+    const splits = (t as any).splits as SplitShare[] | undefined
+    if (t.type === 'expense' && Array.isArray(splits) && (t as any).paidFor === 'others') {
+      splits.forEach(s => {
+        const name = (s.person || '').trim()
+        if (!name) return
+        const key = normalizePersonName(name)
+        if (!displayNames.has(key)) displayNames.set(key, name)
+        const orig = Math.max(0, Number(s.amount) || 0)
+        const conv = Math.max(0, Number(s.convertedToMyExpense) || 0)
+        allDebts.push({
+          txId: t.id,
+          splitId: s.id,
+          person: displayNames.get(key) || name,
+          date: t.date,
+          description: t.description || t.category || 'Shared expense',
+          category: t.category,
+          originalAmount: orig,
+          convertedToMyExpense: conv,
+          repaidAmount: 0,
+          remainingAmount: Math.max(0, orig - conv),
+        })
+      })
+    }
+  })
+
+  // Apply Friend Repayment income against debts
+  const repayments = sorted.filter(
+    t => t.type === 'income' && t.category === 'Friend Repayment' && t.amount > 0
+  )
+  repayments.forEach(rep => {
+    let left = rep.amount
+    const repFor = (rep as any).repaymentFor as { person?: string; splitId?: string; originatingTxId?: string } | undefined
+    const repKey = repFor?.person ? normalizePersonName(repFor.person) : ''
+    const targetSplit = repFor?.splitId
+    const targetTx = repFor?.originatingTxId
+
+    // Priority: exact split/tx match first
+    if (targetSplit || targetTx) {
+      const match = allDebts.find(
+        d => (targetSplit && d.splitId === targetSplit) || (targetTx && d.txId === targetTx)
+      )
+      if (match && match.remainingAmount > 0) {
+        const applied = Math.min(match.remainingAmount, left)
+        match.repaidAmount += applied
+        match.remainingAmount -= applied
+        left -= applied
+      }
+    }
+    // Fallback: oldest outstanding for this person
+    if (left > 0 && repKey) {
+      allDebts
+        .filter(d => normalizePersonName(d.person) === repKey && d.remainingAmount > 0)
+        .forEach(d => {
+          if (left <= 0) return
+          const applied = Math.min(d.remainingAmount, left)
+          d.repaidAmount += applied
+          d.remainingAmount -= applied
+          left -= applied
+        })
+    }
+  })
+
+  // Group by person
+  const grouped = new Map<string, PersonReceivable>()
+  allDebts.forEach(debt => {
+    const key = normalizePersonName(debt.person)
+    const name = displayNames.get(key) || debt.person
+    if (!grouped.has(key)) grouped.set(key, { person: name, totalOwed: 0, items: [] })
+    const g = grouped.get(key)!
+    g.items.push(debt)
+    g.totalOwed += debt.remainingAmount
+  })
+
+  return Array.from(grouped.values())
+    .map(p => ({ ...p, items: p.items.sort((a, b) => b.date.localeCompare(a.date)) }))
+    .filter(p => p.totalOwed > 0)
+}

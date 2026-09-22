@@ -171,7 +171,7 @@ input[type="date"]::-webkit-datetime-edit-month-field:focus,input[type="date"]::
   .modal-layer{padding-bottom:env(safe-area-inset-bottom,0px)}
   .modal{padding-bottom:max(20px,calc(20px + env(safe-area-inset-bottom,0px)))}
 }
-@media(max-width:800px){.side-nav{display:none}.app-shell{display:block}main{margin:0;padding-bottom:0}.mobile-hide{display:none!important}.topbar{height:64px;padding:0 18px}.topbar>.brand{display:flex}.desktop-title{display:none}.top-actions{display:flex;gap:6px;align-items:center}.ai-topbar-btn{height:35px;padding:0 10px;font-size:11.5px}.page{padding:24px 16px calc(115px + env(safe-area-inset-bottom,0px))!important}.page-heading{margin-bottom:24px;align-items:flex-start}.page-heading h1{font-size:34px}.page-heading .desktop-add{display:none}.bottom-nav{position:fixed;z-index:10;display:grid;grid-template-columns:repeat(5,1fr);align-items:center;bottom:0;left:0;right:0;height:68px;padding:6px 5px 8px;background:color-mix(in srgb,var(--surface-strong) 94%,transparent);border-top:1px solid var(--border);backdrop-filter:blur(16px)}.bottom-nav button{color:var(--muted);background:transparent;display:grid;place-items:center;gap:2px;font-size:10px}.bottom-nav button.active{color:var(--accent);font-weight:700}.floating-add{position:fixed;z-index:11;bottom:calc(76px + env(safe-area-inset-bottom,0px));right:18px;left:auto;transform:none;width:52px;height:52px;display:grid;place-items:center;border-radius:50%;background:var(--accent);color:var(--accent-contrast,#172016);box-shadow:0 8px 24px color-mix(in srgb,var(--accent) 35%,transparent)}.summary-grid{margin-bottom:27px}.mobile-ledger-reconcile{display:flex;margin-bottom:14px;width:100%}.desktop-reconcile{display:none!important}.ledger-tools{display:flex;flex-direction:column;gap:10px;width:100%;margin-bottom:20px}.search{width:100%;max-width:none;flex:none}.filters{display:flex;flex-direction:column;gap:8px;width:100%}.filters-row-primary{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%}.filters-row-primary .themed-select-wrapper{width:100%;min-width:0}.filters-row-primary .themed-select-trigger{width:100%;min-width:0}.filters-row-date{width:100%}.overall-budget{align-items:flex-start;gap:18px;flex-direction:column}.overall-budget label{width:100%}.overall-budget input{width:100%}.chart-grid{grid-template-columns:1fr}.chart-card.wide{grid-column:auto}.chart-card{min-height:205px}.stats-summary{grid-template-columns:1fr;gap:8px}.stats-summary .metric{padding:12px}.month-select{margin-top:3px}.config-section{margin-top:25px}.theme-scroller{margin-right:-1px}.about{align-items:flex-start;gap:15px;flex-direction:column}.modal-layer{align-items:flex-end;padding:0}.modal{max-height:90vh;border-radius:24px 24px 0 0;padding:20px}.form-grid{grid-template-columns:1fr!important}.toast{bottom:83px}.row-actions{display:none}.transaction{padding:12px;cursor:pointer}.transaction-value{min-width:76px}.quick-grid{gap:7px}.quick-grid button{padding:11px 3px 9px}.quick-grid button span{width:30px;height:30px}.balance-card{padding:24px}.home-layout{max-width:none}}
+@media(max-width:800px){.side-nav{display:none}.app-shell{display:block}main{margin:0;padding-bottom:0}.mobile-hide{display:none!important}.topbar{height:64px;padding:0 18px}.topbar>.brand{display:flex}.desktop-title{display:none}.top-actions{display:flex;gap:6px;align-items:center}.ai-topbar-btn{height:35px;padding:0 10px;font-size:11.5px}.page{padding:24px 16px calc(115px + env(safe-area-inset-bottom,0px))!important}.page-heading{margin-bottom:24px;align-items:flex-start}.page-heading h1{font-size:34px}.page-heading .desktop-add{display:none}.bottom-nav{position:fixed;z-index:10;display:grid;grid-template-columns:repeat(5,1fr);align-items:center;bottom:0;left:0;right:0;height:68px;padding:6px 5px 8px;background:color-mix(in srgb,var(--surface-strong) 94%,transparent);border-top:1px solid var(--border);backdrop-filter:blur(16px)}.bottom-nav button{color:var(--muted);background:transparent;display:grid;place-items:center;gap:2px;font-size:10px}.bottom-nav button.active{color:var(--accent);font-weight:700}.floating-add{position:fixed;z-index:11;bottom:calc(76px + env(safe-area-inset-bottom,0px));right:18px;left:auto;transform:none;width:52px;height:52px;display:grid;place-items:center;border-radius:50%;background:var(--accent);color:var(--accent-contrast,#172016);box-shadow:0 8px 24px color-mix(in srgb,var(--accent) 35%,transparent)}.summary-grid{margin-bottom:27px}.mobile-ledger-reconcile{display:flex;margin-bottom:14px;width:100%}.desktop-reconcile{display:none!important}.ledger-tools{display:flex;flex-direction:column;gap:10px;width:100%;margin-bottom:20px}.search{width:100%;max-width:none;flex:none}.filters{display:flex;flex-direction:column;gap:8px;width:100%}.filters-row-primary{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%}.filters-row-primary .themed-select-wrapper{width:100%;min-width:0}.filters-row-primary .themed-select-trigger{width:100%;min-width:0}.filters-row-date{width:100%}.overall-budget{align-items:flex-start;gap:18px;flex-direction:column}.overall-budget label{width:100%}.overall-budget input{width:100%}.chart-grid{grid-template-columns:1fr}.chart-card.wide{grid-column:auto}.chart-card{min-height:205px}.stats-summary{grid-template-columns:1fr;gap:8px}.stats-summary .metric{padding:12px}.month-select{margin-top:3px}.config-section{margin-top:25px}.theme-scroller{margin-right:-1px}.about{align-items:flex-start;gap:15px;flex-direction:column}.modal-layer{align-items:flex-end;padding:0}.modal{max-height:90vh;border-radius:24px 24px 0 0;padding:20px}.form-grid{grid-template-columns:1fr!important}.toast{bottom:83px}.row-actions{display:flex;gap:4px}.transaction{padding:12px;cursor:pointer}.transaction-value{min-width:76px}.quick-grid{gap:7px}.quick-grid button{padding:11px 3px 9px}.quick-grid button span{width:30px;height:30px}.balance-card{padding:24px}.home-layout{max-width:none}}
 @media(max-width:420px){.summary-grid{gap:8px}.metric{padding:12px 9px;gap:7px}.metric-icon{height:29px;width:29px}.metric strong{font-size:13px}.metric p,.metric small{font-size:10px}.balance-foot span:last-child{display:none}.page-heading>div>p:last-child{font-size:13px}.quick-grid{grid-template-columns:repeat(5,minmax(0,1fr))}.quick-grid button{font-size:10px}.form-grid{grid-template-columns:1fr}.modal-actions .button{flex:1}.budget-actions{display:none}.ai-topbar-btn span{display:none}.ai-topbar-btn{width:35px;height:35px;padding:0;display:grid;place-items:center;border-radius:50%}}
 /* ThemedSelect Search Box */
 .themed-select-search-box{padding:6px 8px 8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;position:sticky;top:0;z-index:2;background:inherit}
@@ -943,3 +943,36 @@ input:-webkit-autofill:active{
 [data-theme="cream"] .personal-share-input-body { background: #f6efe3; border-color: rgba(118,87,55,.2); }
 [data-theme="amoled"] .personal-share-toggle { background: #0a0a0a; border-color: #1c1c1c; }
 [data-theme="amoled"] .personal-share-input-body { background: #0a0a0a; border-color: #1c1c1c; }
+
+/* ── Mobile row-actions: always visible, stacked below row content ── */
+@media(max-width:800px){
+  .transaction{flex-wrap:wrap;position:relative}
+  .transaction .row-actions{
+    display:flex;
+    flex-basis:100%;
+    justify-content:flex-end;
+    gap:6px;
+    padding-top:8px;
+    margin-top:4px;
+    border-top:1px solid var(--border);
+  }
+  .transaction .row-actions .icon-button{
+    width:36px;height:36px;
+    background:var(--surface-soft);
+    border:1px solid var(--border);
+    border-radius:8px;
+  }
+}
+
+/* ── Money Owed Banner ───────────────────────────────────────────── */
+.money-owed-banner{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:14px 18px;margin-bottom:16px;
+  background:color-mix(in srgb,var(--accent) 8%,var(--surface));
+  border:1px solid color-mix(in srgb,var(--accent) 22%,var(--border));
+  border-radius:var(--radius-sm);
+}
+.money-owed-banner-left{display:flex;align-items:center;gap:10px;min-width:0}
+.money-owed-banner-left svg{color:var(--accent);flex-shrink:0}
+.money-owed-banner-left strong{display:block;font-size:13px;font-weight:600;color:var(--text)}
+.money-owed-banner-left span{display:block;font-size:11px;color:var(--muted);margin-top:1px}
