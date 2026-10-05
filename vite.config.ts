@@ -78,8 +78,17 @@ function aiApiPlugin(env: Record<string, string>): Plugin {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  const supabaseUrl = env.SUPABASE_URL || env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
+  const supabaseAnonKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || ''
 
   return {
+    envPrefix: ['VITE_', 'SUPABASE_'],
+    define: {
+      'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(supabaseUrl),
+      'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(supabaseAnonKey),
+      'import.meta.env.SUPABASE_URL': JSON.stringify(supabaseUrl),
+      'import.meta.env.SUPABASE_ANON_KEY': JSON.stringify(supabaseAnonKey),
+    },
     plugins: [
       react(),
       tailwindcss(),
