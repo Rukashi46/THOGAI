@@ -485,7 +485,7 @@ function App() {
   const markAsMyExpense = (txId: string, splitId: string, amountToConvert: number) => {
     const tx = data.transactions.find(t => t.id === txId)
     if (!tx) return
-    const splits = (tx as any).splits as Array<{ id: string; convertedToMyExpense?: number }> | undefined
+    const splits = tx.splits
     if (!Array.isArray(splits)) return
     const updatedSplits = splits.map(s =>
       s.id === splitId
@@ -515,6 +515,7 @@ function App() {
       recurring: false,
       createdAt: now,
       updatedAt: now,
+      repaymentFor: { person: details.person, splitId: details.splitId, originatingTxId: details.originatingTxId },
     }
     const next = { ...data, transactions: [repaymentTx, ...data.transactions] }
     save(next)
@@ -2191,15 +2192,14 @@ function TransactionModal({
     recurring: initial?.recurring ?? false
   })
 
-  // Paid for others state
-  // personalShare: how much of this expense is yours
-  // undefined = full amount is yours; a number = your actual share
-  const [personalShare, setPersonalShare] = useState<string>(() => {
-    if (initial?.personalShare !== undefined) return String(initial.personalShare)
-    return ''
-  })
-  const [showShareField, setShowShareField] = useState<boolean>(() => {
-    return initial?.personalShare !== undefined
+  // v4 split model
+  const [paidFor, setPaidFor] = useState<'myself' | 'others'>(() =>
+    (initial as any)?.paidFor === 'others' ? 'others' : 'myself'
+  )
+  const [splits, setSplits] = useState<Array<{ id: string; person: string; amount: number; convertedToMyExpense?: number }>>(() => {
+    const existing = (initial as any)?.splits
+    if (Array.isArray(existing) && existing.length > 0) return existing.map((s: any) => ({ ...s }))
+    return [{ id: newId(), person: '', amount: 0 }]
   })
 
   // Repayment state — for income repayment prefill only
@@ -2209,13 +2209,14 @@ function TransactionModal({
 
   const [error, setError] = useState('')
 
-  // knownPeople from notes/descriptions (simplified — no longer from splits)
+  // knownPeople from existing split transactions + notes
   const knownPeople = useMemo(() => {
     const names = new Set<string>()
     allTransactions.forEach((t) => {
+      const spl = (t as any).splits as Array<{ person: string }> | undefined
+      if (Array.isArray(spl)) spl.forEach(s => s.person && names.add(s.person.trim()))
       if (t.notes) {
-        const words = t.notes.split(/[\s,]+/).filter(w => w.length > 1 && /^[A-Z]/.test(w))
-        words.forEach(w => names.add(w))
+        t.notes.split(/[\s,]+/).filter(w => w.length > 1 && /^[A-Z]/.test(w)).forEach(w => names.add(w))
       }
     })
     return Array.from(names).sort()
@@ -2223,7 +2224,9 @@ function TransactionModal({
 
   const totalAmt = Number(form.amount) || 0
   const currencySymbol = currencies.find((c) => c.code === currency)?.symbol ?? '₹'
-  const resolvedPersonalShare = showShareField && personalShare !== '' ? Math.min(totalAmt, Math.max(0, Number(personalShare) || 0)) : undefined
+  const sumFriends = splits.reduce((acc, s) => acc + (Number(s.amount) || 0), 0)
+  const derivedMyShare = Math.max(0, totalAmt - sumFriends)
+  const isSplitOverAllocated = sumFriends > totalAmt + 0.01
 
   const handleTypeChange = (t: TransactionType) => {
     const nextCats = t === 'income' ? incomeCats : expenseCats
@@ -2233,8 +2236,8 @@ function TransactionModal({
       category: nextCats.includes(p.category) ? p.category : (nextCats[0] || 'Other')
     }))
     if (t !== 'expense') {
-      setShowShareField(false)
-      setPersonalShare('')
+      setPaidFor('myself')
+      setSplits([{ id: newId(), person: '', amount: 0 }])
     }
   }
 
@@ -2250,20 +2253,35 @@ function TransactionModal({
     if (!Number.isFinite(amount) || amount <= 0) return setError('Enter an amount greater than zero.')
     if (!form.category) return setError('Choose a category.')
 
-    // Validate personalShare if set
-    if (form.type === 'expense' && showShareField && personalShare !== '') {
-      const share = Number(personalShare)
-      if (isNaN(share) || share < 0) return setError('Enter a valid amount for your share.')
-      if (share > amount) return setError(`Your share (${currencySymbol}${share}) cannot exceed the total (${currencySymbol}${amount}).`)
+    // Validate splits if paying for others
+    if (form.type === 'expense' && paidFor === 'others') {
+      const validSplits = splits.filter(s => s.person.trim())
+      if (validSplits.length === 0) return setError('Add at least one friend name.')
+      if (isSplitOverAllocated) return setError(`Friends' total (${currencySymbol}${sumFriends.toFixed(2)}) exceeds the transaction amount.`)
     }
 
     if (form.type === 'income' && form.category === 'Friend Repayment') {
       if (!repPerson.trim()) return setError('Please specify who made the repayment.')
-      submit({ ...form, amount }, initial?.id)
+      submit({
+        ...form, amount,
+        repaymentFor: { person: repPerson.trim() }
+      } as any, initial?.id)
       return
     }
 
-    submit({ ...form, amount, personalShare: resolvedPersonalShare }, initial?.id)
+    if (form.type === 'expense' && paidFor === 'others') {
+      const cleanSplits = splits
+        .filter(s => s.person.trim())
+        .map(s => ({ id: s.id, person: s.person.trim(), amount: Number(s.amount) || 0, convertedToMyExpense: s.convertedToMyExpense }))
+      submit({
+        ...form, amount,
+        paidFor: 'others',
+        myShare: derivedMyShare,
+        splits: cleanSplits
+      } as any, initial?.id)
+    } else {
+      submit({ ...form, amount } as any, initial?.id)
+    }
   }
 
   const currentCats = form.type === 'income' ? incomeCats : expenseCats
@@ -2309,117 +2327,112 @@ function TransactionModal({
         </div>
       </label>
 
-      {/* Paid for: Myself vs Someone else (for expenses) */}
-      {/* My share — optional field for group expenses */}
+      {/* v4 Split builder — who did you pay for? */}
       {form.type === 'expense' && (
         <div className="form-group">
           <div className="personal-share-toggle" onClick={() => {
-            setShowShareField(v => !v)
-            if (showShareField) setPersonalShare('')
+            const next = paidFor === 'myself' ? 'others' : 'myself'
+            setPaidFor(next)
+            if (next === 'myself') setSplits([{ id: newId(), person: '', amount: 0 }])
           }}>
             <div className="personal-share-toggle-left">
               <div className="personal-share-icon">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                  <circle cx="9" cy="7" r="4"/>
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-                </svg>
+                <Users size={15} />
               </div>
               <div>
-                <span className="personal-share-toggle-label">Group / shared expense?</span>
+                <span className="personal-share-toggle-label">Paid for others too?</span>
                 <small className="personal-share-toggle-hint">
-                  {showShareField
-                    ? 'Your budget will only count your share below'
-                    : 'Tap to enter only your portion of this expense'}
+                  {paidFor === 'others'
+                    ? 'Your budget only counts your derived share below'
+                    : 'Tap to split — enter each friend\'s amount'}
                 </small>
               </div>
             </div>
-            <div className={`toggle ${showShareField ? 'on' : ''}`}>
-              <i />
-            </div>
+            <div className={`toggle ${paidFor === 'others' ? 'on' : ''}`}><i /></div>
           </div>
 
-          {showShareField && (
+          {paidFor === 'others' && (
             <motion.div
-              className="personal-share-input-wrap"
+              className="split-builder-section"
               variants={splitPanelVariants}
               initial="initial"
               animate="animate"
               exit="exit"
               style={{ transformOrigin: 'top center', overflow: 'hidden' }}
             >
-              <div className="personal-share-input-body">
-                <div className="personal-share-input-row">
-                  <div className="input-with-currency">
+              {/* Status pill */}
+              <div className={`split-status ${isSplitOverAllocated ? 'error' : Math.abs(derivedMyShare) < 0.01 ? 'allocated' : 'unallocated'}`}>
+                {isSplitOverAllocated
+                  ? `Over by ${currencySymbol}${(sumFriends - totalAmt).toFixed(2)}`
+                  : Math.abs(derivedMyShare) < 0.01
+                  ? 'Fully allocated'
+                  : `${currencySymbol}${derivedMyShare.toFixed(2)} is your share`}
+              </div>
+
+              {/* Friend rows */}
+              {splits.map((s, i) => (
+                <div key={s.id} className="split-person-row">
+                  <input
+                    type="text"
+                    list="datalist-known-people"
+                    placeholder={`Friend ${i + 1} name`}
+                    value={s.person}
+                    onChange={e => setSplits(prev => prev.map((x, j) => j === i ? { ...x, person: e.target.value } : x))}
+                  />
+                  <div className="input-with-currency" style={{ flex: '0 0 110px' }}>
                     <span className="input-prefix">{currencySymbol}</span>
                     <input
                       type="number"
                       inputMode="decimal"
                       step="any"
                       min="0"
-                      max={totalAmt || undefined}
-                      placeholder="Your share"
-                      value={personalShare}
-                      onChange={e => setPersonalShare(e.target.value)}
-                      autoFocus
+                      placeholder="0"
+                      value={s.amount || ''}
+                      onChange={e => setSplits(prev => prev.map((x, j) => j === i ? { ...x, amount: Number(e.target.value) || 0 } : x))}
                     />
                   </div>
-                  {totalAmt > 0 && (
-                    <div className="personal-share-presets">
-                      {[25, 50].map(pct => {
-                        const amt = Math.round(totalAmt * pct / 100 * 100) / 100
-                        return (
-                          <motion.button
-                            key={pct}
-                            type="button"
-                            whileTap={buttonTap}
-                            onClick={() => setPersonalShare(String(amt))}
-                            className={`personal-share-preset-btn ${Number(personalShare) === amt ? 'active' : ''}`}
-                          >
-                            {pct}%
-                          </motion.button>
-                        )
-                      })}
-                    </div>
+                  {splits.length > 1 && (
+                    <button
+                      type="button"
+                      className="split-remove-btn"
+                      onClick={() => setSplits(prev => prev.filter((_, j) => j !== i))}
+                      aria-label="Remove"
+                    >×</button>
                   )}
                 </div>
+              ))}
 
-                {/* Live preview */}
-                {totalAmt > 0 && personalShare !== '' && (
-                  <div className="personal-share-preview">
-                    <div className="personal-share-preview-row">
-                      <span>Your budget impact</span>
-                      <motion.strong
-                        key={resolvedPersonalShare}
-                        initial={{ opacity: 0.5, y: -3 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                        className="personal-share-preview-amount"
-                        style={{
-                          color: (resolvedPersonalShare ?? totalAmt) === 0 ? 'var(--muted)' : 'var(--accent)'
-                        }}
-                      >
-                        {currencySymbol}{(resolvedPersonalShare ?? totalAmt).toFixed(2)}
-                      </motion.strong>
-                    </div>
-                    <div className="personal-share-preview-row secondary">
-                      <span>Cash out of account</span>
-                      <span>{currencySymbol}{totalAmt.toFixed(2)}</span>
-                    </div>
-                    {totalAmt > 0 && resolvedPersonalShare !== undefined && resolvedPersonalShare < totalAmt && (
-                      <p className="personal-share-preview-note">
-                        The {currencySymbol}{(totalAmt - resolvedPersonalShare).toFixed(2)} difference was paid for others — it affects your balance but not your budget.
-                      </p>
-                    )}
-                    {resolvedPersonalShare !== undefined && resolvedPersonalShare >= totalAmt && (
-                      <p className="personal-share-preview-note warning">
-                        Your share equals or exceeds the total — consider leaving this field blank.
-                      </p>
-                    )}
+              {/* Add another person */}
+              <button
+                type="button"
+                className="button ghost"
+                style={{ fontSize: 13, minHeight: 34, padding: '0 12px' }}
+                onClick={() => setSplits(prev => [...prev, { id: newId(), person: '', amount: 0 }])}
+              >
+                + Add another person
+              </button>
+
+              {/* Derived my-share display */}
+              {totalAmt > 0 && (
+                <div className="split-my-share-display">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <span style={{ fontSize: 12, color: 'var(--muted)' }}>Your share (auto)</span>
+                    <strong style={{ fontSize: 15, color: isSplitOverAllocated ? 'var(--negative)' : 'var(--accent)' }}>
+                      {currencySymbol}{derivedMyShare.toFixed(2)}
+                    </strong>
                   </div>
-                )}
-              </div>
+                  <div className="split-my-share-bar">
+                    <motion.div
+                      className="split-my-share-fill"
+                      animate={{ width: `${Math.min(100, totalAmt > 0 ? (derivedMyShare / totalAmt) * 100 : 0)}%` }}
+                      transition={{ type: 'spring', stiffness: 200, damping: 28 }}
+                    />
+                  </div>
+                  <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 5, marginBottom: 0 }}>
+                    Total {currencySymbol}{totalAmt.toFixed(2)} · friends {currencySymbol}{sumFriends.toFixed(2)} · your share = {currencySymbol}{derivedMyShare.toFixed(2)}
+                  </p>
+                </div>
+              )}
             </motion.div>
           )}
         </div>
@@ -2628,16 +2641,19 @@ function LockScreen({settings,onUnlock}:{settings:Settings;onUnlock:()=>void}) {
  useEffect(()=>{if(settings.biometricLock)triggerBiometrics()},[]);
  const press=(num:string)=>{if(pin.length>=4)return;const next=pin+num;setPin(next);setError('');if(next.length===4){if(!settings.appLockPin||security.verifyPin(next,settings.appLockPin)){setTimeout(()=>onUnlock(),120)}else{setShake(true);setError('Incorrect PIN');setTimeout(()=>{setShake(false);setPin('')},500)}}};
  const backspace=()=>{setPin(p=>p.slice(0,-1));setError('')};
- // Keyboard support: digits, Backspace, Delete, Enter
+ // Keyboard support — useRef avoids stale closure when listener is registered once
+ const pressRef=useRef(press); pressRef.current=press;
+ const backspaceRef=useRef(backspace); backspaceRef.current=backspace;
  useEffect(()=>{
    const onKey=(e:KeyboardEvent)=>{
      if(e.metaKey||e.ctrlKey||e.altKey)return;
-     if(/^[0-9]$/.test(e.key)){e.preventDefault();press(e.key)}
-     else if(e.key==='Backspace'||e.key==='Delete'){e.preventDefault();backspace()}
+     if(/^[0-9]$/.test(e.key)){e.preventDefault();pressRef.current(e.key)}
+     else if(e.key==='Backspace'||e.key==='Delete'){e.preventDefault();backspaceRef.current()}
    };
    window.addEventListener('keydown',onKey);
    return ()=>window.removeEventListener('keydown',onKey);
- },[pin]);
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[]);
  return <motion.div className="lock-screen" variants={lockScreenVariants} initial="initial" animate="animate" exit="exit"><div className={`lock-box ${shake?'shake':''}`}><div className="lock-shield"><LockKeyhole size={28}/></div><h1 className="lock-title">THOGAI Locked</h1><p className="lock-subtitle">{settings.biometricLock?'Enter PIN or verify biometrics':'Enter 4-digit PIN to continue'}</p><div className="pin-dots">{[0,1,2,3].map(i=><motion.div key={i} className={`pin-dot ${i<pin.length?'filled':''}`} animate={i<pin.length?{scale:[1,1.3,1],transition:{type:'spring',stiffness:600,damping:18,mass:0.5}}:{scale:1}} style={{willChange:'transform'}}/>)}</div>{error&&<p className="form-error" style={{marginBottom:16}}>{error}</p>}<div className="keypad">{['1','2','3','4','5','6','7','8','9'].map(k=><motion.button key={k} type="button" className="key-btn" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={()=>press(k)}>{k}</motion.button>)}{settings.biometricLock?<motion.button type="button" className="key-btn action" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={triggerBiometrics} title="Unlock with biometrics" disabled={checkingBio}><Fingerprint size={26}/></motion.button>:<motion.button type="button" className="key-btn action" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={()=>setPin('')}>Clear</motion.button>}<motion.button type="button" className="key-btn" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={()=>press('0')}>0</motion.button><motion.button type="button" className="key-btn action" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={backspace} title="Backspace"><Delete size={20}/></motion.button></div></div></motion.div>
 }
 
@@ -2645,18 +2661,21 @@ function PinSetupModal({close,onSave}:{close:()=>void;onSave:(pin:string)=>void}
  const [step,setStep]=useState<'create'|'confirm'>('create'); const [pin,setPin]=useState(''); const [firstPin,setFirstPin]=useState(''); const [error,setError]=useState(''); const [shake,setShake]=useState(false);
  const press=(num:string)=>{if(pin.length>=4)return;const next=pin+num;setPin(next);setError('');if(next.length===4){if(step==='create'){setTimeout(()=>{setFirstPin(next);setPin('');setStep('confirm')},180)}else{if(next===firstPin){setTimeout(()=>onSave(next),180)}else{setShake(true);setError('PINs did not match. Try again.');setTimeout(()=>{setShake(false);setPin('');setFirstPin('');setStep('create')},600)}}}};
  const backspace=()=>{setPin(p=>p.slice(0,-1));setError('')};
- // Keyboard: digit keys, Backspace, Escape
+ // Keyboard: digit keys, Backspace, Escape — useRef avoids stale closure
+ const pressRef2=useRef(press); pressRef2.current=press;
+ const backspaceRef2=useRef(backspace); backspaceRef2.current=backspace;
+ const closeRef=useRef(close); closeRef.current=close;
  useEffect(()=>{
    const onKey=(e:KeyboardEvent)=>{
      if(e.metaKey||e.ctrlKey||e.altKey)return;
-     if(/^[0-9]$/.test(e.key)){e.preventDefault();press(e.key)}
-     else if(e.key==='Backspace'||e.key==='Delete'){e.preventDefault();backspace()}
-     else if(e.key==='Escape'){e.preventDefault();close()}
+     if(/^[0-9]$/.test(e.key)){e.preventDefault();pressRef2.current(e.key)}
+     else if(e.key==='Backspace'||e.key==='Delete'){e.preventDefault();backspaceRef2.current()}
+     else if(e.key==='Escape'){e.preventDefault();closeRef.current()}
    };
    window.addEventListener('keydown',onKey);
    return ()=>window.removeEventListener('keydown',onKey);
  // eslint-disable-next-line react-hooks/exhaustive-deps
- },[pin,step]);
+ },[]);
  return <Modal close={close} title={step==='create'?'Set 4-digit PIN':'Confirm 4-digit PIN'}><div className={`lock-box ${shake?'shake':''}`} style={{margin:'8px auto'}}><p className="modal-intro" style={{textAlign:'center',marginBottom:18}}>{step==='create'?'Choose a 4-digit PIN to secure your financial records.':'Re-enter the same 4-digit PIN to confirm.'}</p><div className="pin-dots">{[0,1,2,3].map(i=><motion.div key={i} className={`pin-dot ${i<pin.length?'filled':''}`} animate={i<pin.length?{scale:[1,1.3,1],transition:{type:'spring',stiffness:600,damping:18,mass:0.5}}:{scale:1}} style={{willChange:'transform'}}/>)}</div>{error&&<p className="form-error" style={{marginBottom:14}}>{error}</p>}<div className="keypad">{['1','2','3','4','5','6','7','8','9'].map(k=><motion.button key={k} type="button" className="key-btn" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={()=>press(k)}>{k}</motion.button>)}<motion.button type="button" className="key-btn action" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={()=>setPin('')}>Clear</motion.button><motion.button type="button" className="key-btn" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={()=>press('0')}>0</motion.button><motion.button type="button" className="key-btn action" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={backspace} title="Backspace"><Delete size={20}/></motion.button></div></div></Modal>
 }
 

@@ -1,4 +1,5 @@
-import type { Budget, Settings, Transaction } from '../services/storage'
+import type { Budget, Settings, Transaction, SplitShare } from '../services/storage'
+export type { SplitShare }
 export const currencies = [{code:'INR',symbol:'₹',name:'Indian Rupee',locale:'en-IN'},{code:'USD',symbol:'$',name:'US Dollar',locale:'en-US'},{code:'EUR',symbol:'€',name:'Euro',locale:'de-DE'},{code:'GBP',symbol:'£',name:'British Pound',locale:'en-GB'},{code:'AED',symbol:'د.إ',name:'UAE Dirham',locale:'en-AE'},{code:'CAD',symbol:'CA$',name:'Canadian Dollar',locale:'en-CA'},{code:'AUD',symbol:'A$',name:'Australian Dollar',locale:'en-AU'},{code:'SGD',symbol:'S$',name:'Singapore Dollar',locale:'en-SG'}] as const
 export const formatMoney = (amount: number, currency = 'INR', compact = false) => { const c = currencies.find(x => x.code === currency) ?? currencies[0]; const safe = Number.isFinite(amount) ? amount : 0; return new Intl.NumberFormat(c.locale, { style: 'currency', currency: c.code, currencyDisplay: 'narrowSymbol', notation: compact ? 'compact' : 'standard', maximumFractionDigits: safe % 1 ? 2 : 0 }).format(safe) }
 export const monthKey = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`
@@ -18,9 +19,17 @@ export const isInMonth = (date: string, key = monthKey()) => date.slice(0,7) ===
  */
 export const getPersonalExpenseAmount = (t: Transaction): number => {
   if (t.type !== 'expense') return 0
-  const safe = (n: number | undefined) => (Number.isFinite(n) && n! >= 0) ? n! : undefined
-  const share = safe(t.personalShare)
-  if (share !== undefined) return share
+  const safe = (n: number | undefined): number | undefined =>
+    Number.isFinite(n) && n! >= 0 ? n! : undefined
+  const ps = safe(t.personalShare)
+  if (ps !== undefined) return ps
+  if (t.paidFor === 'others') {
+    const myShare = safe(t.myShare) ?? 0
+    const converted = (t.splits || []).reduce(
+      (acc, s) => acc + (safe(s.convertedToMyExpense) ?? 0), 0
+    )
+    return myShare + converted
+  }
   return Number.isFinite(t.amount) ? Math.max(0, t.amount) : 0
 }
 
@@ -135,14 +144,7 @@ export const seedBudgets = (categories: string[]): Budget[] => {
 }
 
 
-// ─── Split share types (for MoneyOwedModal) ───────────────────────────────────
-
-export interface SplitShare {
-  id: string
-  person: string
-  amount: number
-  convertedToMyExpense?: number
-}
+// ─── Split / Ledger types ─────────────────────────────────────────────────────
 
 export interface DebtItem {
   txId: string

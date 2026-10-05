@@ -1,6 +1,13 @@
 export type TransactionType = 'income' | 'expense' | 'due'
 export type Period = 'monthly'
 export type ThemeId = 'midnight' | 'cream' | 'amoled'
+export interface SplitShare {
+  id: string
+  person: string
+  amount: number
+  convertedToMyExpense?: number
+}
+
 export interface Transaction {
   id: string
   type: TransactionType
@@ -14,18 +21,15 @@ export interface Transaction {
   createdAt: string
   updatedAt: string
   /**
-   * personalShare: how much of this expense actually counts toward your budget.
-   * Undefined = the full amount is your expense.
-   * Set this when you paid for a group and only part of it is yours,
-   * OR when friends paid you back before/after.
-   *
-   * Examples:
-   *   Paid ₹2000 for a group meal, your share is ₹200 → personalShare: 200
-   *   Collected ₹900 before paying ₹1200 → personalShare: 300
-   *   Budget sees personalShare (or amount if undefined).
-   *   Balance always reflects the full amount (what actually left your account).
+   * personalShare: legacy field — how much of this expense counts toward your budget.
+   * Undefined = full amount. Kept for backwards compat.
    */
   personalShare?: number
+  /** v4 split model */
+  paidFor?: 'myself' | 'others'
+  myShare?: number
+  splits?: SplitShare[]
+  repaymentFor?: { person: string; splitId?: string; originatingTxId?: string }
 }
 export interface Budget { id: string; category: string; limit: number; period: Period; createdAt: string; updatedAt: string }
 
