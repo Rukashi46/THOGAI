@@ -1,5 +1,6 @@
 import type { Budget, Settings, Transaction } from './storage'
 import { formatMoney, monthKey, snapshot } from '../lib/finance'
+import { getApiUrl } from '../lib/api'
 
 export interface FinancialContext {
   currency: string
@@ -184,7 +185,7 @@ export async function queryAiAdvisor(
   }
 
   try {
-    const res = await fetch('/api/ai', {
+    const res = await fetch(getApiUrl('/api/ai'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

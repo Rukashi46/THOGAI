@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">THOGAI</string>
+    <string name="title_activity_main">THOGAI</string>
+    <string name="package_name">com.thogai.app</string>
+    <string name="custom_url_scheme">com.thogai.app</string>
+</resources>

@@ -8,6 +8,7 @@
 
 import type { StatementTransaction } from './storage'
 import { newId } from '../lib/finance'
+import { getApiUrl } from '../lib/api'
 
 // ─── File Type Detection ──────────────────────────────────────────────────────
 
@@ -157,7 +158,7 @@ async function interpretStatement(
   startDate: string,
   endDate: string
 ): Promise<AIStatementResponse> {
-  const response = await fetch('/api/reconcile', {
+  const response = await fetch(getApiUrl('/api/reconcile'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
