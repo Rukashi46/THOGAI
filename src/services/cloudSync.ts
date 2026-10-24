@@ -12,6 +12,11 @@ export function encodeTransactionNotes(tx: Transaction): string {
   const baseNotes = (tx.notes || '').replace(/<!--thogai-meta:.*?-->/gs, '').trim()
   const meta: Record<string, any> = {}
   if (tx.personalShare !== undefined) meta.personalShare = tx.personalShare
+  // v4 split fields — must be round-tripped through cloud so money-owed logic survives sync
+  if (tx.paidFor !== undefined) meta.paidFor = tx.paidFor
+  if (tx.myShare !== undefined) meta.myShare = tx.myShare
+  if (Array.isArray(tx.splits) && tx.splits.length > 0) meta.splits = tx.splits
+  if (tx.repaymentFor !== undefined) meta.repaymentFor = tx.repaymentFor
 
   if (Object.keys(meta).length === 0) {
     return baseNotes
@@ -23,6 +28,10 @@ export function encodeTransactionNotes(tx: Transaction): string {
 export function decodeTransactionNotes(rawNotes: string = ''): {
   notes: string
   personalShare?: number
+  paidFor?: 'myself' | 'others'
+  myShare?: number
+  splits?: Array<{ id: string; person: string; amount: number; convertedToMyExpense?: number }>
+  repaymentFor?: { person: string; splitId?: string; originatingTxId?: string }
 } {
   const match = rawNotes.match(/<!--thogai-meta:(.*?)-->/s)
   const cleanNotes = rawNotes.replace(/<!--thogai-meta:.*?-->/gs, '').trim()
@@ -33,7 +42,11 @@ export function decodeTransactionNotes(rawNotes: string = ''): {
     const meta = JSON.parse(match[1])
     return {
       notes: cleanNotes,
-      personalShare: typeof meta.personalShare === 'number' ? meta.personalShare : undefined
+      personalShare: typeof meta.personalShare === 'number' ? meta.personalShare : undefined,
+      paidFor: meta.paidFor === 'myself' || meta.paidFor === 'others' ? meta.paidFor : undefined,
+      myShare: typeof meta.myShare === 'number' ? meta.myShare : undefined,
+      splits: Array.isArray(meta.splits) ? meta.splits : undefined,
+      repaymentFor: meta.repaymentFor && typeof meta.repaymentFor.person === 'string' ? meta.repaymentFor : undefined,
     }
   } catch {
     return { notes: cleanNotes }
@@ -134,6 +147,11 @@ class CloudSyncService {
           date: t.date,
           notes: decoded.notes,
           personalShare: decoded.personalShare,
+          // v4 split fields restored from encoded notes
+          ...(decoded.paidFor !== undefined && { paidFor: decoded.paidFor }),
+          ...(decoded.myShare !== undefined && { myShare: decoded.myShare }),
+          ...(decoded.splits !== undefined && { splits: decoded.splits }),
+          ...(decoded.repaymentFor !== undefined && { repaymentFor: decoded.repaymentFor }),
           recurring: Boolean(t.recurring),
           createdAt: t.created_at,
           updatedAt: t.updated_at
@@ -148,11 +166,18 @@ class CloudSyncService {
         if (!local) {
           txMap.set(ct.id, ct)
         } else {
-          // Last-Write-Wins
+          // Last-Write-Wins — but preserve local split/repayment fields if cloud version
+          // lacks them (can happen when cloud was written before this fix was deployed)
           const localTime = new Date(local.updatedAt).getTime()
           const cloudTime = new Date(ct.updatedAt).getTime()
           if (cloudTime >= localTime) {
-            txMap.set(ct.id, ct)
+            // Cloud wins: merge local split fields if cloud is missing them
+            const merged: Transaction = { ...ct }
+            if (!merged.paidFor && local.paidFor) merged.paidFor = local.paidFor
+            if (merged.myShare === undefined && local.myShare !== undefined) merged.myShare = local.myShare
+            if (!merged.splits && local.splits) merged.splits = local.splits
+            if (!merged.repaymentFor && local.repaymentFor) merged.repaymentFor = local.repaymentFor
+            txMap.set(ct.id, merged)
           }
         }
       })

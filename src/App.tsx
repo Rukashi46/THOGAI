@@ -1330,6 +1330,12 @@ function TransactionRow({
   const I = tx.type === 'income' ? ArrowDownLeft : tx.type === 'due' ? Landmark : categoryIcons[tx.category] ?? ReceiptText
   const hasPersonalShare = tx.personalShare !== undefined && tx.personalShare < tx.amount
   const isRepayment = tx.type === 'income' && tx.category === 'Friend Repayment'
+  // v4 split model display
+  const isSplitExpense = tx.type === 'expense' && tx.paidFor === 'others' && Array.isArray(tx.splits) && tx.splits.length > 0
+  const splitPeople = isSplitExpense ? tx.splits!.filter(s => s.person.trim()).map(s => s.person.trim()) : []
+  const myShareAmt = isSplitExpense ? (tx.myShare ?? 0) : null
+  // repayment from person
+  const repaymentPerson = isRepayment && tx.repaymentFor?.person ? tx.repaymentFor.person : null
 
   return (
     <motion.article
@@ -1349,7 +1355,12 @@ function TransactionRow({
         <span>
           {tx.category}
           {tx.account ? ` · ${tx.account}` : ''}
-          {isRepayment ? ' · Repayment' : ''}
+          {isRepayment && repaymentPerson ? ` · from ${repaymentPerson}` : isRepayment ? ' · Repayment' : ''}
+          {isSplitExpense && splitPeople.length > 0 && (
+            <span style={{ display: 'block', fontSize: 10, color: 'var(--muted)', marginTop: 1 }}>
+              Shared with {splitPeople.join(', ')}
+            </span>
+          )}
           {hasPersonalShare && (
             <span style={{ display: 'block', fontSize: 10, color: 'var(--muted)', marginTop: 1 }}>
               Your share: {formatMoney(tx.personalShare!, currency)}
@@ -1363,7 +1374,11 @@ function TransactionRow({
         <strong>
           {tx.type === 'income' ? '+' : '−'} {formatMoney(tx.amount, currency)}
         </strong>
-        {hasPersonalShare ? (
+        {isSplitExpense && myShareAmt !== null ? (
+          <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+            Personal: {formatMoney(myShareAmt, currency)}
+          </span>
+        ) : hasPersonalShare ? (
           <span style={{ fontSize: 11, color: 'var(--muted)' }}>
             {formatMoney(tx.personalShare!, currency)} yours
           </span>
