@@ -1888,17 +1888,32 @@ function ConfigPage({
   const exportData=()=>{const blob=new Blob([storage.export(data)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`thogai-backup-${today()}.json`;a.click();URL.revokeObjectURL(a.href);toast('Your data was exported')};
   const importData=(file?:File)=>{if(!file)return;const reader=new FileReader();reader.onload=()=>{try{save(storage.import(String(reader.result)));toast('Backup imported successfully')}catch(e){toast(e instanceof Error?e.message:'Import failed')}};reader.readAsText(file)};
   const clear = () => {
+    const isSignedIn = Boolean(currentUser)
     askConfirm({
-      title: 'Clear all local data?',
-      message: 'This will permanently remove all transactions, budgets, and settings from this device. This action cannot be undone.',
+      title: 'Clear all data?',
+      message: isSignedIn
+        ? 'This will permanently delete all your transactions, budgets, and settings from this device AND your cloud account. This cannot be undone.'
+        : 'This will permanently remove all transactions, budgets, and settings from this device. This action cannot be undone.',
       confirmText: 'Clear data',
       cancelText: 'Cancel',
       danger: true,
       icon: 'trash',
-      onConfirm: () => {
+      onConfirm: async () => {
+        // 1. Wipe cloud first (while we still have the user reference)
+        if (currentUser) {
+          try {
+            await cloudSync.deleteAllUserData(currentUser)
+          } catch {
+            // Non-fatal: wipe local regardless
+          }
+          await idbStorage.clearUserData(currentUser.id)
+        }
+        // 2. Wipe local storage and IDB guest slot
         storage.clear()
+        idbStorage.clearUserData(null)
+        // 3. Reset in-memory state
         save({ transactions: [], budgets: [], settings: defaultSettings })
-        toast('All local data cleared')
+        toast('All data cleared')
       }
     })
   }

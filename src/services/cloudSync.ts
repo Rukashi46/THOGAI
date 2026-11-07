@@ -134,6 +134,9 @@ class CloudSyncService {
       if (bErr) throw bErr
       if (sErr) throw sErr
 
+      // Load tombstones so deleted transactions don't get re-added from cloud
+      const tombstones = await idbStorage.getDeletedTombstones(user.id)
+
       // Map cloud transactions to local format
       const mappedCloudTx: Transaction[] = (cloudTx || []).map((t: any) => {
         const decoded = decodeTransactionNotes(t.notes || '')
@@ -162,6 +165,14 @@ class CloudSyncService {
       const txMap = new Map<string, Transaction>()
       localData.transactions.forEach((t) => txMap.set(t.id, t))
       mappedCloudTx.forEach((ct) => {
+        // If this id was deleted locally more recently than the cloud copy, keep it gone
+        const tombstone = tombstones[ct.id]
+        if (tombstone) {
+          const cloudTime = new Date(ct.updatedAt).getTime()
+          const deletedTime = new Date(tombstone).getTime()
+          if (deletedTime >= cloudTime) return // local delete wins — skip re-adding
+        }
+
         const local = txMap.get(ct.id)
         if (!local) {
           txMap.set(ct.id, ct)
@@ -263,6 +274,9 @@ class CloudSyncService {
     }
 
     if (!navigator.onLine) {
+      if (op === 'DELETE') {
+        await idbStorage.addDeletedTombstone(user.id, tx.id)
+      }
       await this.enqueue(user.id, 'transaction', tx.id, op, tx)
       this.setSyncState('offline')
       return
@@ -271,6 +285,8 @@ class CloudSyncService {
     this.setSyncState('syncing')
     try {
       if (op === 'DELETE') {
+        // Record a tombstone so this id is never re-added by a subsequent pull()
+        await idbStorage.addDeletedTombstone(user.id, tx.id)
         const { error } = await supabase.from('transactions').delete().eq('id', tx.id).eq('user_id', user.id)
         if (error) throw error
       } else {
@@ -558,6 +574,29 @@ class CloudSyncService {
       if (import.meta.env.DEV) {
         console.error('Migration failed:', err)
       }
+      this.setSyncState('error')
+      throw err
+    }
+  }
+
+  /**
+   * Delete ALL cloud data for a user (transactions, budgets, settings).
+   * Called when the user chooses "Clear all data" while signed in.
+   */
+  public async deleteAllUserData(user: AuthUser): Promise<void> {
+    if (!isSupabaseConfigured()) return
+    this.setSyncState('syncing')
+    try {
+      await Promise.all([
+        supabase.from('transactions').delete().eq('user_id', user.id),
+        supabase.from('budgets').delete().eq('user_id', user.id),
+        supabase.from('user_settings').delete().eq('user_id', user.id),
+      ])
+      // Also clear any pending offline queue so wiped items don't get re-pushed
+      await idbStorage.saveQueuedSyncs(user.id, [])
+      this.setSyncState('synced')
+    } catch (err) {
+      if (import.meta.env.DEV) console.error('deleteAllUserData failed:', err)
       this.setSyncState('error')
       throw err
     }
