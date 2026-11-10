@@ -1,6 +1,6 @@
 export type TransactionType = 'income' | 'expense' | 'due'
 export type Period = 'monthly'
-export type ThemeId = 'midnight' | 'cream' | 'amoled'
+export type ThemeId = 'midnight' | 'cream' | 'amoled' | 'liquid' | 'navy'
 export interface SplitShare {
   id: string
   person: string
@@ -186,7 +186,7 @@ export const defaultSettings: Settings = {
 }
 const KEY = 'thogai.finance.v1'
 const fallback: FinanceData = { transactions: [], budgets: [], settings: defaultSettings }
-const validThemes: ThemeId[] = ['midnight', 'cream', 'amoled']
+const validThemes: ThemeId[] = ['midnight', 'cream', 'amoled', 'liquid', 'navy']
 export const sanitizeTheme = (theme?: unknown): ThemeId => (typeof theme === 'string' && (validThemes as string[]).includes(theme)) ? (theme as ThemeId) : 'midnight'
 
 export function safeMergeItems(existing: unknown, defaults: string[]): string[] {

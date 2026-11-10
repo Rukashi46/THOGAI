@@ -260,7 +260,13 @@ function ConfirmModal({
   )
 }
 const navOrder: Page[] = ['home', 'ledger', 'budget', 'stats', 'config']
-const themes: {id:ThemeId;name:string;copy:string}[] = [{id:'midnight',name:'Midnight Glass',copy:'Liquid glass'}, {id:'cream',name:'Cream Clay',copy:'Softly molded'}, {id:'amoled',name:'AMOLED Stealth',copy:'Pure black'}]
+const themes: {id:ThemeId;name:string;copy:string}[] = [
+  {id:'liquid',name:'Midnight Liquid',copy:'Deep violet glass'},
+  {id:'navy',name:'Deep Navy / Gold',copy:'Dark navy & warm gold'},
+  {id:'midnight',name:'Midnight Glass',copy:'Liquid glass'},
+  {id:'cream',name:'Cream Clay',copy:'Softly molded'},
+  {id:'amoled',name:'AMOLED Stealth',copy:'Pure black'},
+]
 const today = () => new Date().toISOString().slice(0,10)
 const safe = (n:number) => Number.isFinite(n) ? n : 0
 
@@ -340,10 +346,14 @@ function App() {
   // Theme synchronization (runs immediately before any render)
   useEffect(()=>{
     document.documentElement.dataset.theme=data.settings.theme;
-    document.documentElement.style.colorScheme=['midnight','amoled'].includes(data.settings.theme)?'dark':'light';
+    const lightThemes: ThemeId[] = ['cream']
+    document.documentElement.style.colorScheme = lightThemes.includes(data.settings.theme) ? 'light' : 'dark';
     const metaThemeColor = document.querySelector('meta[name="theme-color"]');
     if (metaThemeColor) {
-      metaThemeColor.setAttribute('content', data.settings.theme === 'cream' ? '#f4ecdc' : data.settings.theme === 'amoled' ? '#000000' : '#10231e');
+      const metaColors: Partial<Record<ThemeId,string>> = {
+        cream: '#f4ecdc', amoled: '#000000', liquid: '#0b0b14', navy: '#0d1526', midnight: '#10231e'
+      }
+      metaThemeColor.setAttribute('content', metaColors[data.settings.theme] ?? '#10231e');
     }
   },[data.settings.theme])
 
