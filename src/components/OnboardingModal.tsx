@@ -2,14 +2,22 @@ import React, { useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   ArrowLeft, ArrowRight, BarChart3, Bot, Check, CheckCircle2,
-  CircleDollarSign, Landmark, Plus, Scale, ShieldCheck,
+  CircleDollarSign, Landmark, Palette, Plus, Scale, ShieldCheck,
   Trash2, User, WalletCards, X
 } from 'lucide-react'
 import { currencies, formatMoney } from '../lib/finance'
 import {
   defaultAccounts, defaultExpenseCategories, defaultIncomeCategories,
-  type Settings, type Transaction
+  setDefaultTheme, type Settings, type ThemeId, type Transaction
 } from '../services/storage'
+
+const ONBOARDING_THEMES: { id: ThemeId; name: string; copy: string; bg: string; barColor: string }[] = [
+  { id: 'liquid',   name: 'Midnight Liquid', copy: 'Deep violet glass',  bg: '#0b0b14', barColor: '#6a3dff' },
+  { id: 'navy',     name: 'Deep Navy / Gold', copy: 'Dark navy & gold',   bg: '#0d1526', barColor: '#c9a227' },
+  { id: 'midnight', name: 'Midnight Glass',   copy: 'Classic dark glass', bg: '#10231e', barColor: '#afdf6d' },
+  { id: 'cream',    name: 'Cream Clay',       copy: 'Warm & minimal',     bg: '#f4ecdc', barColor: '#ad6d40' },
+  { id: 'cyan',     name: 'Graphite Cyan',    copy: 'Techy & futuristic', bg: '#0d1a1f', barColor: '#00d4e8' },
+]
 import {
   backdropVariants, desktopModalVariants, mobileSheetVariants,
   reducedMotionVariants, wordRevealContainer, wordRevealItem,
@@ -25,7 +33,7 @@ interface OnboardingModalProps {
   }) => Promise<void> | void
 }
 
-const TOTAL_STEPS = 5
+const TOTAL_STEPS = 6
 
 function AnimatedHeading({ text, className = '' }: { text: string; className?: string }) {
   const reduced = useReducedMotion()
@@ -81,7 +89,10 @@ export function OnboardingModal({
   const [step, setStep] = useState(1)
   const [direction, setDirection] = useState(1)
 
-  // Step 2: Personalize
+  // Step 2: Theme pick
+  const [selectedTheme, setSelectedTheme] = useState<ThemeId>(currentSettings.theme || 'liquid')
+
+  // Step 3: Personalize
   const [nickname, setNickname] = useState<string>(currentSettings.name || '')
   const [selectedCurrency, setSelectedCurrency] = useState(currentSettings.currency || 'INR')
 
@@ -125,7 +136,12 @@ export function OnboardingModal({
     // Sum opening balances to set startingBalance in settings without creating earned income
     const sumOpening = accounts.reduce((acc, a) => acc + (Number(a.openingBalance) || 0), 0)
 
+    // Persist the chosen theme as the pinned default so cloud sync never overwrites it
+    setDefaultTheme(selectedTheme)
+
     const patch: Partial<Settings> = {
+      theme: selectedTheme,
+      defaultTheme: selectedTheme,
       currency: selectedCurrency,
       categories: expenseCats,
       incomeCategories: incomeCats,
@@ -282,7 +298,7 @@ export function OnboardingModal({
               </motion.div>
             )}
 
-            {/* STEP 2: Personalize */}
+            {/* STEP 2: Theme Picker */}
             {step === 2 && (
               <motion.div
                 key="step-2"
@@ -294,8 +310,54 @@ export function OnboardingModal({
                 className="onboarding-step-pane"
               >
                 <div className="step-badge">
-                  <User size={16} />
+                  <Palette size={16} />
                   <span>Step 2 of {TOTAL_STEPS}</span>
+                </div>
+                <AnimatedHeading text="Choose your theme" className="onboarding-title" />
+                <p className="onboarding-desc">
+                  Pick a look that feels right. You can always change it later in Settings.
+                </p>
+                <div className="onboarding-theme-grid">
+                  {ONBOARDING_THEMES.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      className={`onboarding-theme-card ${selectedTheme === t.id ? 'selected' : ''}`}
+                      onClick={() => {
+                        setSelectedTheme(t.id)
+                        // Live preview — apply theme immediately so user sees it
+                        document.documentElement.dataset.theme = t.id
+                      }}
+                      style={{ '--preview-bg': t.bg, '--preview-bar': t.barColor } as React.CSSProperties}
+                    >
+                      <span className="obt-preview">
+                        <i /><i /><i />
+                      </span>
+                      <strong>{t.name}</strong>
+                      <small>{t.copy}</small>
+                      {selectedTheme === t.id && (
+                        <b className="obt-check"><Check size={12} /></b>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+
+            {/* STEP 3: Personalize */}
+            {step === 3 && (
+              <motion.div
+                key="step-3"
+                custom={direction}
+                variants={onboardingStepVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="onboarding-step-pane"
+              >
+                <div className="step-badge">
+                  <User size={16} />
+                  <span>Step 3 of {TOTAL_STEPS}</span>
                 </div>
                 <AnimatedHeading text="Personalize your experience" className="onboarding-title" />
                 <p className="onboarding-desc">
@@ -343,10 +405,10 @@ export function OnboardingModal({
               </motion.div>
             )}
 
-            {/* STEP 3: Categories */}
-            {step === 3 && (
+            {/* STEP 4: Categories */}
+            {step === 4 && (
               <motion.div
-                key="step-3"
+                key="step-4"
                 custom={direction}
                 variants={onboardingStepVariants}
                 initial="initial"
@@ -356,7 +418,7 @@ export function OnboardingModal({
               >
                 <div className="step-badge">
                   <BarChart3 size={16} />
-                  <span>Step 3 of {TOTAL_STEPS}</span>
+                  <span>Step 4 of {TOTAL_STEPS}</span>
                 </div>
                 <AnimatedHeading text="Review your categories" className="onboarding-title" />
                 <p className="onboarding-desc">
@@ -421,10 +483,10 @@ export function OnboardingModal({
               </motion.div>
             )}
 
-            {/* STEP 4: Accounts & Initial Balances */}
-            {step === 4 && (
+            {/* STEP 5: Accounts & Initial Balances */}
+            {step === 5 && (
               <motion.div
-                key="step-4"
+                key="step-5"
                 custom={direction}
                 variants={onboardingStepVariants}
                 initial="initial"
@@ -434,7 +496,7 @@ export function OnboardingModal({
               >
                 <div className="step-badge">
                   <WalletCards size={16} />
-                  <span>Step 4 of {TOTAL_STEPS}</span>
+                  <span>Step 5 of {TOTAL_STEPS}</span>
                 </div>
                 <AnimatedHeading text="Set up your accounts" className="onboarding-title" />
                 <p className="onboarding-desc">
@@ -502,10 +564,10 @@ export function OnboardingModal({
               </motion.div>
             )}
 
-            {/* STEP 5: You're Ready */}
-            {step === 5 && (
+            {/* STEP 6: You're Ready */}
+            {step === 6 && (
               <motion.div
-                key="step-5"
+                key="step-6"
                 custom={direction}
                 variants={onboardingStepVariants}
                 initial="initial"

@@ -5,6 +5,7 @@ import { authService, type AuthUser } from '../services/auth'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { authStepVariants, iosSpring } from '../lib/motion'
 import type { ThemeId } from '../services/storage'
+import { getThemeLogo } from '../lib/branding'
 
 interface AuthScreenProps {
   currentTheme: ThemeId
@@ -240,9 +241,11 @@ export function AuthScreen({
   }
 
   const themes: { id: ThemeId; label: string; short: string }[] = [
-    { id: 'midnight', label: 'Midnight Glass', short: 'Midnight' },
+    { id: 'navy', label: 'Deep Navy & Gold', short: 'Navy' },
+    { id: 'liquid', label: 'Midnight Liquid', short: 'Liquid' },
+    { id: 'midnight', label: 'Green Midnight', short: 'Green' },
     { id: 'cream', label: 'Cream Clay', short: 'Cream' },
-    { id: 'amoled', label: 'AMOLED', short: 'AMOLED' }
+    { id: 'cyan', label: 'Graphite Cyan', short: 'Cyan' }
   ]
 
   if (isVerifiedSuccess) {
@@ -252,8 +255,7 @@ export function AuthScreen({
         <header className="auth-topbar">
           <div className="brand">
             <div className="brand-mark" aria-hidden="true">
-              <i /><i /><i />
-              <b><Leaf size={11} /></b>
+              <img src={getThemeLogo(currentTheme)} alt="THOGAI" className="brand-logo-img" />
             </div>
             <div className="auth-brand-text">
               <strong>THOGAI</strong>
@@ -310,8 +312,7 @@ export function AuthScreen({
       <header className="auth-topbar">
         <div className="brand">
           <div className="brand-mark" aria-hidden="true">
-            <i /><i /><i />
-            <b><Leaf size={11} /></b>
+            <img src={getThemeLogo(currentTheme)} alt="THOGAI" className="brand-logo-img" />
           </div>
           <div className="auth-brand-text">
             <strong>THOGAI</strong>

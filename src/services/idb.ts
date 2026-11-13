@@ -96,6 +96,7 @@ export const idbStorage = {
     const key = this.getScopedKey(userId, 'finance_data')
     await idbRemove(key)
     await idbRemove(this.getScopedKey(userId, 'queued_syncs'))
+    if (userId) await idbRemove(`tombstones_${userId}`)
   },
 
   async getQueuedSyncs(userId: string | null): Promise<QueuedSync[]> {
@@ -116,6 +117,27 @@ export const idbStorage = {
 
   async markDataMigrated(userId: string): Promise<void> {
     await idbSet(`migrated_${userId}`, true)
+  },
+
+  /**
+   * Tombstones: record deleted transaction IDs with the deletion timestamp
+   * so pull() never re-adds them from Supabase.
+   * Shape: { [txId]: ISO timestamp }
+   */
+  async getDeletedTombstones(userId: string): Promise<Record<string, string>> {
+    const key = `tombstones_${userId}`
+    return (await idbGet<Record<string, string>>(key)) || {}
+  },
+
+  async addDeletedTombstone(userId: string, txId: string): Promise<void> {
+    const key = `tombstones_${userId}`
+    const existing = (await idbGet<Record<string, string>>(key)) || {}
+    existing[txId] = new Date().toISOString()
+    await idbSet(key, existing)
+  },
+
+  async clearDeletedTombstones(userId: string): Promise<void> {
+    await idbRemove(`tombstones_${userId}`)
   },
 
   async getReconciliationHistory(userId: string | null): Promise<any[]> {

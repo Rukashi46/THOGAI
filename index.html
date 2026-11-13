@@ -8,24 +8,33 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>THOGAI — Know your money.</title>
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <link rel="icon" type="image/svg+xml" href="/icon-192.svg" />
-    <link rel="apple-touch-icon" href="/icon-192.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
     <script>
       try {
-        var r = localStorage.getItem('thogai.finance.v1');
-        if (r) {
-          var p = JSON.parse(r);
-          var t = p && p.settings && p.settings.theme;
-          if (t && ['midnight', 'cream', 'amoled'].includes(t)) {
-            document.documentElement.dataset.theme = t;
-            document.documentElement.style.colorScheme = t === 'cream' ? 'light' : 'dark';
-            var m = document.querySelector('meta[name="theme-color"]');
-            if (m) m.setAttribute('content', t === 'cream' ? '#f4ecdc' : t === 'amoled' ? '#000000' : '#10231e');
+        var validThemes = ['midnight', 'cream', 'cyan', 'liquid', 'navy'];
+        // Prefer pinned default theme (device-only key) so it survives re-login
+        var pinned = localStorage.getItem('thogai.defaultTheme');
+        var t = pinned && validThemes.includes(pinned) ? pinned : null;
+        if (!t) {
+          var r = localStorage.getItem('thogai.finance.v1');
+          if (r) {
+            var p = JSON.parse(r);
+            var stored = p && p.settings && p.settings.theme;
+            if (stored && validThemes.includes(stored)) t = stored;
           }
+        }
+        if (t) {
+          document.documentElement.dataset.theme = t;
+          document.documentElement.style.colorScheme = t === 'cream' ? 'light' : 'dark';
+          var metaColors = { cream: '#f4ecdc', cyan: '#0d1a1f', liquid: '#0b0b14', navy: '#0d1526', midnight: '#10231e' };
+          var m = document.querySelector('meta[name="theme-color"]');
+          if (m) m.setAttribute('content', metaColors[t] || '#10231e');
         }
       } catch (e) {}
       if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {

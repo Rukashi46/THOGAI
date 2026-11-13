@@ -18,6 +18,7 @@
     "@capacitor/cli": "6.2.0",
     "@capacitor/core": "6.2.0",
     "@capacitor/status-bar": "6.0.2",
+    "@capgo/capacitor-native-biometric": "^6.0.4",
     "@supabase/supabase-js": "^2.116.0",
     "@tailwindcss/vite": "latest",
     "@vitejs/plugin-react": "latest",

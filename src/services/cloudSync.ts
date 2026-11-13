@@ -1,6 +1,6 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { idbStorage, type QueuedSync } from './idb'
-import { storage, type Budget, type FinanceData, type ReconciliationRecord, type Settings, type Transaction } from './storage'
+import { storage, getDefaultTheme, type Budget, type FinanceData, type ReconciliationRecord, type Settings, type Transaction } from './storage'
 import type { AuthUser } from './auth'
 
 export type SyncState = 'idle' | 'syncing' | 'synced' | 'offline' | 'error'
@@ -12,6 +12,11 @@ export function encodeTransactionNotes(tx: Transaction): string {
   const baseNotes = (tx.notes || '').replace(/<!--thogai-meta:.*?-->/gs, '').trim()
   const meta: Record<string, any> = {}
   if (tx.personalShare !== undefined) meta.personalShare = tx.personalShare
+  // v4 split fields — must be round-tripped through cloud so money-owed logic survives sync
+  if (tx.paidFor !== undefined) meta.paidFor = tx.paidFor
+  if (tx.myShare !== undefined) meta.myShare = tx.myShare
+  if (Array.isArray(tx.splits) && tx.splits.length > 0) meta.splits = tx.splits
+  if (tx.repaymentFor !== undefined) meta.repaymentFor = tx.repaymentFor
 
   if (Object.keys(meta).length === 0) {
     return baseNotes
@@ -23,6 +28,10 @@ export function encodeTransactionNotes(tx: Transaction): string {
 export function decodeTransactionNotes(rawNotes: string = ''): {
   notes: string
   personalShare?: number
+  paidFor?: 'myself' | 'others'
+  myShare?: number
+  splits?: Array<{ id: string; person: string; amount: number; convertedToMyExpense?: number }>
+  repaymentFor?: { person: string; splitId?: string; originatingTxId?: string }
 } {
   const match = rawNotes.match(/<!--thogai-meta:(.*?)-->/s)
   const cleanNotes = rawNotes.replace(/<!--thogai-meta:.*?-->/gs, '').trim()
@@ -33,7 +42,11 @@ export function decodeTransactionNotes(rawNotes: string = ''): {
     const meta = JSON.parse(match[1])
     return {
       notes: cleanNotes,
-      personalShare: typeof meta.personalShare === 'number' ? meta.personalShare : undefined
+      personalShare: typeof meta.personalShare === 'number' ? meta.personalShare : undefined,
+      paidFor: meta.paidFor === 'myself' || meta.paidFor === 'others' ? meta.paidFor : undefined,
+      myShare: typeof meta.myShare === 'number' ? meta.myShare : undefined,
+      splits: Array.isArray(meta.splits) ? meta.splits : undefined,
+      repaymentFor: meta.repaymentFor && typeof meta.repaymentFor.person === 'string' ? meta.repaymentFor : undefined,
     }
   } catch {
     return { notes: cleanNotes }
@@ -121,6 +134,9 @@ class CloudSyncService {
       if (bErr) throw bErr
       if (sErr) throw sErr
 
+      // Load tombstones so deleted transactions don't get re-added from cloud
+      const tombstones = await idbStorage.getDeletedTombstones(user.id)
+
       // Map cloud transactions to local format
       const mappedCloudTx: Transaction[] = (cloudTx || []).map((t: any) => {
         const decoded = decodeTransactionNotes(t.notes || '')
@@ -134,6 +150,11 @@ class CloudSyncService {
           date: t.date,
           notes: decoded.notes,
           personalShare: decoded.personalShare,
+          // v4 split fields restored from encoded notes
+          ...(decoded.paidFor !== undefined && { paidFor: decoded.paidFor }),
+          ...(decoded.myShare !== undefined && { myShare: decoded.myShare }),
+          ...(decoded.splits !== undefined && { splits: decoded.splits }),
+          ...(decoded.repaymentFor !== undefined && { repaymentFor: decoded.repaymentFor }),
           recurring: Boolean(t.recurring),
           createdAt: t.created_at,
           updatedAt: t.updated_at
@@ -144,15 +165,30 @@ class CloudSyncService {
       const txMap = new Map<string, Transaction>()
       localData.transactions.forEach((t) => txMap.set(t.id, t))
       mappedCloudTx.forEach((ct) => {
+        // If this id was deleted locally more recently than the cloud copy, keep it gone
+        const tombstone = tombstones[ct.id]
+        if (tombstone) {
+          const cloudTime = new Date(ct.updatedAt).getTime()
+          const deletedTime = new Date(tombstone).getTime()
+          if (deletedTime >= cloudTime) return // local delete wins — skip re-adding
+        }
+
         const local = txMap.get(ct.id)
         if (!local) {
           txMap.set(ct.id, ct)
         } else {
-          // Last-Write-Wins
+          // Last-Write-Wins — but preserve local split/repayment fields if cloud version
+          // lacks them (can happen when cloud was written before this fix was deployed)
           const localTime = new Date(local.updatedAt).getTime()
           const cloudTime = new Date(ct.updatedAt).getTime()
           if (cloudTime >= localTime) {
-            txMap.set(ct.id, ct)
+            // Cloud wins: merge local split fields if cloud is missing them
+            const merged: Transaction = { ...ct }
+            if (!merged.paidFor && local.paidFor) merged.paidFor = local.paidFor
+            if (merged.myShare === undefined && local.myShare !== undefined) merged.myShare = local.myShare
+            if (!merged.splits && local.splits) merged.splits = local.splits
+            if (!merged.repaymentFor && local.repaymentFor) merged.repaymentFor = local.repaymentFor
+            txMap.set(ct.id, merged)
           }
         }
       })
@@ -185,6 +221,9 @@ class CloudSyncService {
       // Merge Settings
       let mergedSettings = { ...localData.settings }
       if (cloudSettings) {
+        // Determine active theme: pinned default theme (device-only) always wins over cloud value
+        const pinnedDefault = getDefaultTheme()
+        const resolvedTheme = pinnedDefault ?? cloudSettings.theme ?? mergedSettings.theme
         mergedSettings = {
           ...mergedSettings,
           currency: cloudSettings.currency || mergedSettings.currency,
@@ -192,7 +231,8 @@ class CloudSyncService {
           startingBalance: Number(cloudSettings.starting_balance ?? mergedSettings.startingBalance),
           defaultCategory: cloudSettings.default_category || mergedSettings.defaultCategory,
           defaultAccount: cloudSettings.default_account || mergedSettings.defaultAccount,
-          theme: cloudSettings.theme || mergedSettings.theme,
+          theme: resolvedTheme,
+          defaultTheme: pinnedDefault,
           categories: Array.isArray(cloudSettings.categories) ? cloudSettings.categories : mergedSettings.categories,
           incomeCategories: Array.isArray(cloudSettings.income_categories) ? cloudSettings.income_categories : mergedSettings.incomeCategories,
           accounts: Array.isArray(cloudSettings.accounts) ? cloudSettings.accounts : mergedSettings.accounts,
@@ -238,6 +278,9 @@ class CloudSyncService {
     }
 
     if (!navigator.onLine) {
+      if (op === 'DELETE') {
+        await idbStorage.addDeletedTombstone(user.id, tx.id)
+      }
       await this.enqueue(user.id, 'transaction', tx.id, op, tx)
       this.setSyncState('offline')
       return
@@ -246,6 +289,8 @@ class CloudSyncService {
     this.setSyncState('syncing')
     try {
       if (op === 'DELETE') {
+        // Record a tombstone so this id is never re-added by a subsequent pull()
+        await idbStorage.addDeletedTombstone(user.id, tx.id)
         const { error } = await supabase.from('transactions').delete().eq('id', tx.id).eq('user_id', user.id)
         if (error) throw error
       } else {
@@ -533,6 +578,29 @@ class CloudSyncService {
       if (import.meta.env.DEV) {
         console.error('Migration failed:', err)
       }
+      this.setSyncState('error')
+      throw err
+    }
+  }
+
+  /**
+   * Delete ALL cloud data for a user (transactions, budgets, settings).
+   * Called when the user chooses "Clear all data" while signed in.
+   */
+  public async deleteAllUserData(user: AuthUser): Promise<void> {
+    if (!isSupabaseConfigured()) return
+    this.setSyncState('syncing')
+    try {
+      await Promise.all([
+        supabase.from('transactions').delete().eq('user_id', user.id),
+        supabase.from('budgets').delete().eq('user_id', user.id),
+        supabase.from('user_settings').delete().eq('user_id', user.id),
+      ])
+      // Also clear any pending offline queue so wiped items don't get re-pushed
+      await idbStorage.saveQueuedSyncs(user.id, [])
+      this.setSyncState('synced')
+    } catch (err) {
+      if (import.meta.env.DEV) console.error('deleteAllUserData failed:', err)
       this.setSyncState('error')
       throw err
     }

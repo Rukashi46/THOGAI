@@ -15,7 +15,8 @@ import {
 import { categorySpend, currencies, formatMoney, groupByDate, labelDate, monthKey, newId, seedBudgets, snapshot, budgetState } from './lib/finance'
 import {
   defaultAccounts, defaultCategories, defaultExpenseCategories, defaultIncomeCategories,
-  defaultSettings, storage, type Budget, type FinanceData, type ReconciliationRecord,
+  defaultSettings, storage, getDefaultTheme, setDefaultTheme,
+  type Budget, type FinanceData, type ReconciliationRecord,
   type ReconciliationSession, type ReconciliationMatch, type ReconciliationMatchType,
   type Settings, type StatementTransaction, type ThemeId,
   type Transaction, type TransactionType
@@ -32,6 +33,7 @@ import { idbStorage } from './services/idb'
 import { isSupabaseConfigured } from './lib/supabase'
 import { AuthScreen } from './components/AuthScreen'
 import { MoneyOwedModal } from './components/MoneyOwedModal'
+import { getThemeLogo } from './lib/branding'
 import {
   pageVariants, desktopModalVariants, mobileSheetVariants, backdropVariants,
   buttonTap, primaryButtonTap, reducedMotionVariants, iosSpring, sheetSpring, snapSpring,
@@ -260,11 +262,27 @@ function ConfirmModal({
   )
 }
 const navOrder: Page[] = ['home', 'ledger', 'budget', 'stats', 'config']
-const themes: {id:ThemeId;name:string;copy:string}[] = [{id:'midnight',name:'Midnight Glass',copy:'Liquid glass'}, {id:'cream',name:'Cream Clay',copy:'Softly molded'}, {id:'amoled',name:'AMOLED Stealth',copy:'Pure black'}]
+const themes: {id:ThemeId;name:string;copy:string}[] = [
+  {id:'navy',name:'Deep Navy & Gold',copy:'Dark navy & warm gold'},
+  {id:'liquid',name:'Midnight Liquid',copy:'Deep violet glass'},
+  {id:'midnight',name:'Green Midnight',copy:'Emerald green glass'},
+  {id:'cream',name:'Cream Clay',copy:'Warm sculptural clay'},
+  {id:'cyan',name:'Graphite Cyan',copy:'Techy cyan glass'},
+]
 const today = () => new Date().toISOString().slice(0,10)
 const safe = (n:number) => Number.isFinite(n) ? n : 0
 
-function Brand({small=false}:{small?:boolean}) { return <div className="brand"><div className="brand-mark" aria-hidden="true"><i></i><i></i><i></i><b><Leaf size={11}/></b></div>{!small&&<div><strong>THOGAI</strong><span>Know your money.</span></div>}</div> }
+function Brand({small=false, theme}:{small?:boolean; theme?:ThemeId}) {
+  const currentTheme = theme || (typeof document !== 'undefined' ? (document.documentElement.dataset.theme as ThemeId) : 'navy') || 'navy'
+  return (
+    <div className="brand">
+      <div className={`brand-mark ${small ? 'brand-mark-small' : ''}`} aria-hidden="true">
+        <img src={getThemeLogo(currentTheme)} alt="THOGAI" className="brand-logo-img" />
+      </div>
+      {!small && <div><strong>THOGAI</strong><span>Know your money.</span></div>}
+    </div>
+  )
+}
 function IconButton({children,label,onClick,active=false,className=''}:{children:React.ReactNode;label:string;onClick?:(e: React.MouseEvent<HTMLButtonElement>)=>void;active?:boolean;className?:string}) {return <motion.button whileTap={buttonTap} className={`icon-button ${active?'is-active':''} ${className}`} aria-label={label} title={label} onClick={onClick}>{children}</motion.button>}
 function Progress({value,state='normal'}:{value:number;state?:string}) {return <div className="progress" aria-label={`${Math.round(value)}% used`}><motion.span className={`progress-fill ${state}`} initial={{width:0}} animate={{width:`${Math.min(100,Math.max(0,value))}%`}} transition={{ type: 'spring', stiffness: 180, damping: 28, mass: 1.0 }} style={{willChange:'width'}}/></div>}
 function Empty({onAction}:{onAction:(type:TransactionType| 'budget')=>void}) {return <section className="empty"><div className="empty-orbit"><TrendingUp size={30}/></div><h2>Your money story starts here.</h2><p>Set a foundation, then THOGAI will make every month easier to understand.</p><div className="empty-actions"><button className="button primary" onClick={()=>onAction('income')}><ArrowDownLeft size={17}/> Add income</button><button className="button ghost" onClick={()=>onAction('expense')}><Plus size={17}/> Add expense</button></div><button className="text-button" onClick={()=>onAction('budget')}>Set a monthly budget <ChevronRight size={15}/></button></section>}
@@ -340,10 +358,14 @@ function App() {
   // Theme synchronization (runs immediately before any render)
   useEffect(()=>{
     document.documentElement.dataset.theme=data.settings.theme;
-    document.documentElement.style.colorScheme=['midnight','amoled'].includes(data.settings.theme)?'dark':'light';
+    const lightThemes: ThemeId[] = ['cream']
+    document.documentElement.style.colorScheme = lightThemes.includes(data.settings.theme) ? 'light' : 'dark';
     const metaThemeColor = document.querySelector('meta[name="theme-color"]');
     if (metaThemeColor) {
-      metaThemeColor.setAttribute('content', data.settings.theme === 'cream' ? '#f4ecdc' : data.settings.theme === 'amoled' ? '#000000' : '#10231e');
+      const metaColors: Partial<Record<ThemeId,string>> = {
+        cream: '#f4ecdc', cyan: '#0d1a1f', liquid: '#0b0b14', navy: '#0d1526', midnight: '#10231e'
+      }
+      metaThemeColor.setAttribute('content', metaColors[data.settings.theme] ?? '#10231e');
     }
   },[data.settings.theme])
 
@@ -665,10 +687,11 @@ function App() {
   if (isRestoringSession) {
     return (
       <div className="thogai-splash">
-        <div className="brand-mark" aria-hidden="true">
-          <i /><i /><i />
-          <b><Leaf size={14} /></b>
-        </div>
+        <img
+          src={getThemeLogo(data.settings.theme)}
+          alt="THOGAI"
+          className="thogai-splash-logo"
+        />
         <div className="thogai-splash-title">THOGAI</div>
         <div className="thogai-splash-subtitle">Know your money.</div>
         <div className="thogai-splash-spinner" />
@@ -723,16 +746,23 @@ function App() {
         {isLocked && (
           <LockScreen
             settings={data.settings}
+            currentUser={currentUser}
             onUnlock={() => {
               sessionStorage.setItem('thogai_unlocked', 'true')
               setIsLocked(false)
+            }}
+            onResetLock={() => {
+              setSettings({ appLock: false, appLockPin: '' })
+              sessionStorage.setItem('thogai_unlocked', 'true')
+              setIsLocked(false)
+              setToast('App Lock PIN has been reset')
             }}
           />
         )}
       </AnimatePresence>
 
       <aside className="side-nav">
-        <Brand />
+        <Brand theme={data.settings.theme} />
         <nav>
           {nav.map((item) => {
             const I = item.icon
@@ -756,7 +786,7 @@ function App() {
 
       <main>
         <header className="topbar">
-          <Brand small />
+          <Brand small theme={data.settings.theme} />
           <div className="desktop-title">{nav.find((x) => x.id === page)?.label}</div>
           <div className="top-actions">
             <SyncPill state={syncState} onClick={handleManualSync} lastSynced={lastSyncedAt} />
@@ -1330,6 +1360,12 @@ function TransactionRow({
   const I = tx.type === 'income' ? ArrowDownLeft : tx.type === 'due' ? Landmark : categoryIcons[tx.category] ?? ReceiptText
   const hasPersonalShare = tx.personalShare !== undefined && tx.personalShare < tx.amount
   const isRepayment = tx.type === 'income' && tx.category === 'Friend Repayment'
+  // v4 split model display
+  const isSplitExpense = tx.type === 'expense' && tx.paidFor === 'others' && Array.isArray(tx.splits) && tx.splits.length > 0
+  const splitPeople = isSplitExpense ? tx.splits!.filter(s => s.person.trim()).map(s => s.person.trim()) : []
+  const myShareAmt = isSplitExpense ? (tx.myShare ?? 0) : null
+  // repayment from person
+  const repaymentPerson = isRepayment && tx.repaymentFor?.person ? tx.repaymentFor.person : null
 
   return (
     <motion.article
@@ -1349,7 +1385,12 @@ function TransactionRow({
         <span>
           {tx.category}
           {tx.account ? ` · ${tx.account}` : ''}
-          {isRepayment ? ' · Repayment' : ''}
+          {isRepayment && repaymentPerson ? ` · from ${repaymentPerson}` : isRepayment ? ' · Repayment' : ''}
+          {isSplitExpense && splitPeople.length > 0 && (
+            <span style={{ display: 'block', fontSize: 10, color: 'var(--muted)', marginTop: 1 }}>
+              Shared with {splitPeople.join(', ')}
+            </span>
+          )}
           {hasPersonalShare && (
             <span style={{ display: 'block', fontSize: 10, color: 'var(--muted)', marginTop: 1 }}>
               Your share: {formatMoney(tx.personalShare!, currency)}
@@ -1363,7 +1404,11 @@ function TransactionRow({
         <strong>
           {tx.type === 'income' ? '+' : '−'} {formatMoney(tx.amount, currency)}
         </strong>
-        {hasPersonalShare ? (
+        {isSplitExpense && myShareAmt !== null ? (
+          <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+            Personal: {formatMoney(myShareAmt, currency)}
+          </span>
+        ) : hasPersonalShare ? (
           <span style={{ fontSize: 11, color: 'var(--muted)' }}>
             {formatMoney(tx.personalShare!, currency)} yours
           </span>
@@ -1873,17 +1918,32 @@ function ConfigPage({
   const exportData=()=>{const blob=new Blob([storage.export(data)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`thogai-backup-${today()}.json`;a.click();URL.revokeObjectURL(a.href);toast('Your data was exported')};
   const importData=(file?:File)=>{if(!file)return;const reader=new FileReader();reader.onload=()=>{try{save(storage.import(String(reader.result)));toast('Backup imported successfully')}catch(e){toast(e instanceof Error?e.message:'Import failed')}};reader.readAsText(file)};
   const clear = () => {
+    const isSignedIn = Boolean(currentUser)
     askConfirm({
-      title: 'Clear all local data?',
-      message: 'This will permanently remove all transactions, budgets, and settings from this device. This action cannot be undone.',
+      title: 'Clear all data?',
+      message: isSignedIn
+        ? 'This will permanently delete all your transactions, budgets, and settings from this device AND your cloud account. This cannot be undone.'
+        : 'This will permanently remove all transactions, budgets, and settings from this device. This action cannot be undone.',
       confirmText: 'Clear data',
       cancelText: 'Cancel',
       danger: true,
       icon: 'trash',
-      onConfirm: () => {
+      onConfirm: async () => {
+        // 1. Wipe cloud first (while we still have the user reference)
+        if (currentUser) {
+          try {
+            await cloudSync.deleteAllUserData(currentUser)
+          } catch {
+            // Non-fatal: wipe local regardless
+          }
+          await idbStorage.clearUserData(currentUser.id)
+        }
+        // 2. Wipe local storage and IDB guest slot
         storage.clear()
+        idbStorage.clearUserData(null)
+        // 3. Reset in-memory state
         save({ transactions: [], budgets: [], settings: defaultSettings })
-        toast('All local data cleared')
+        toast('All data cleared')
       }
     })
   }
@@ -2057,19 +2117,68 @@ function ConfigPage({
           <div className="theme-scroller">
             {themes.map(t=>(
               <button key={t.id} className={`theme-card ${t.id} ${data.settings.theme===t.id?'selected':''}`} onClick={()=>setSettings({theme:t.id})}>
-                <span className="theme-preview"><i/><i/><i/></span>
-                <strong>{t.name}</strong>
-                <small>{t.copy}</small>
+                <img src={getThemeLogo(t.id)} alt={t.name} className="theme-card-thumb" />
+                <div style={{minWidth:0,flex:1}}>
+                  <strong>{t.name}</strong>
+                  <small>{t.copy}</small>
+                </div>
                 {data.settings.theme===t.id&&<b><Check size={13}/></b>}
               </button>
             ))}
+          </div>
+          {/* Default theme row */}
+          <div className="default-theme-row">
+            <span className="default-theme-label">
+              <strong>Keep this theme on every login</strong>
+              <small>{data.settings.defaultTheme ? `Pinned: ${themes.find(t=>t.id===data.settings.defaultTheme)?.name ?? data.settings.defaultTheme}` : 'Theme may change when syncing from cloud'}</small>
+            </span>
+            <button
+              className={`button compact ${data.settings.defaultTheme ? 'primary' : 'secondary'}`}
+              onClick={()=>{
+                const pinned = data.settings.defaultTheme
+                const newPin = pinned ? null : data.settings.theme
+                setDefaultTheme(newPin)
+                setSettings({ defaultTheme: newPin })
+                toast(newPin ? `${themes.find(t=>t.id===newPin)?.name} set as default theme` : 'Default theme cleared')
+              }}
+            >
+              {data.settings.defaultTheme ? <><Check size={13}/> Pinned</> : 'Pin as default'}
+            </button>
           </div>
         </div>
 
         <div className="mb-4 pt-3 border-t border-border-subtle">
           <label className="text-xs font-semibold text-muted uppercase tracking-wider block mb-2">Security</label>
           <ToggleRow title="App lock" detail={data.settings.appLockPin?"Require 4-digit PIN on app open":"Set up 4-digit PIN lock"} on={data.settings.appLock} set={(v)=>{if(v){if(data.settings.appLockPin){setSettings({appLock:true});toast('App Lock enabled')}else{setModal({mode:'pin_setup',nextAction:'appLock'})}}else{setSettings({appLock:false});toast('App Lock disabled')}}}/>
-          <ToggleRow title="Biometric lock" detail="Unlock with Touch ID, Face ID or Windows Hello" on={data.settings.biometricLock} set={async(v)=>{if(v){const available=await security.isBiometricAvailable();if(!available){toast('Platform biometrics / Windows Hello not available on this browser/device');return}if(!data.settings.appLockPin){toast('Please set an App PIN first as backup');setModal({mode:'pin_setup',nextAction:'biometricLock'});return}const reg=await security.registerBiometric();if(reg){setSettings({biometricLock:true});toast('Biometric lock enabled')}else{toast('Biometric registration was cancelled')}}else{setSettings({biometricLock:false});toast('Biometric lock disabled')}}}/>
+          <ToggleRow
+            title="Biometric lock"
+            detail="Unlock with Fingerprint, Face ID or Biometrics"
+            on={data.settings.biometricLock}
+            set={async(v)=>{
+              if(v){
+                const available=await security.isBiometricAvailable();
+                if(!available){
+                  toast('Biometric authentication is not supported or not enrolled on this device');
+                  return;
+                }
+                if(!data.settings.appLockPin){
+                  toast('Please set an App PIN first as backup');
+                  setModal({mode:'pin_setup',nextAction:'biometricLock'});
+                  return;
+                }
+                const reg=await security.registerBiometric();
+                if(reg){
+                  setSettings({biometricLock:true});
+                  toast('Biometric lock enabled');
+                }else{
+                  toast('Biometric authentication was cancelled');
+                }
+              }else{
+                setSettings({biometricLock:false});
+                toast('Biometric lock disabled');
+              }
+            }}
+          />
           {data.settings.appLockPin&&<SettingRow icon={<KeyRound size={18}/>} title="Change PIN" detail="Update your 4-digit security code"><button className="button compact ghost" onClick={()=>setModal({mode:'pin_setup',nextAction:'changePin'})}>Change PIN</button></SettingRow>}
           {(data.settings.appLock||data.settings.biometricLock)&&<button className="data-action" onClick={()=>{sessionStorage.removeItem('thogai_unlocked');setIsLocked(true)}}><LockKeyhole size={18}/><span><strong>Lock App Now</strong><small>Return to secure lock screen immediately</small></span><ChevronRight size={17}/></button>}
         </div>
@@ -2117,7 +2226,7 @@ function ConfigPage({
 
       <ConfigSection title="About">
         <div className="about-card">
-          <Brand/>
+          <Brand theme={data.settings.theme} />
           <div className="about-meta">
             <span className="about-version">Version 1.0.0</span>
             <span className="about-sep">·</span>
@@ -2635,26 +2744,273 @@ function Modal({ title, close, children }: { title: string; close: () => void; c
   )
 }
 
-function LockScreen({settings,onUnlock}:{settings:Settings;onUnlock:()=>void}) {
- const [pin,setPin]=useState(''); const [error,setError]=useState(''); const [shake,setShake]=useState(false); const [checkingBio,setCheckingBio]=useState(false);
- const triggerBiometrics=async()=>{if(!settings.biometricLock)return;setCheckingBio(true);setError('');try{const ok=await security.verifyBiometric();if(ok)onUnlock()}catch{}finally{setCheckingBio(false)}};
- useEffect(()=>{if(settings.biometricLock)triggerBiometrics()},[]);
- const press=(num:string)=>{if(pin.length>=4)return;const next=pin+num;setPin(next);setError('');if(next.length===4){if(!settings.appLockPin||security.verifyPin(next,settings.appLockPin)){setTimeout(()=>onUnlock(),120)}else{setShake(true);setError('Incorrect PIN');setTimeout(()=>{setShake(false);setPin('')},500)}}};
- const backspace=()=>{setPin(p=>p.slice(0,-1));setError('')};
- // Keyboard support — useRef avoids stale closure when listener is registered once
- const pressRef=useRef(press); pressRef.current=press;
- const backspaceRef=useRef(backspace); backspaceRef.current=backspace;
- useEffect(()=>{
-   const onKey=(e:KeyboardEvent)=>{
-     if(e.metaKey||e.ctrlKey||e.altKey)return;
-     if(/^[0-9]$/.test(e.key)){e.preventDefault();pressRef.current(e.key)}
-     else if(e.key==='Backspace'||e.key==='Delete'){e.preventDefault();backspaceRef.current()}
-   };
-   window.addEventListener('keydown',onKey);
-   return ()=>window.removeEventListener('keydown',onKey);
- // eslint-disable-next-line react-hooks/exhaustive-deps
- },[]);
- return <motion.div className="lock-screen" variants={lockScreenVariants} initial="initial" animate="animate" exit="exit"><div className={`lock-box ${shake?'shake':''}`}><div className="lock-shield"><LockKeyhole size={28}/></div><h1 className="lock-title">THOGAI Locked</h1><p className="lock-subtitle">{settings.biometricLock?'Enter PIN or verify biometrics':'Enter 4-digit PIN to continue'}</p><div className="pin-dots">{[0,1,2,3].map(i=><motion.div key={i} className={`pin-dot ${i<pin.length?'filled':''}`} animate={i<pin.length?{scale:[1,1.3,1],transition:{type:'spring',stiffness:600,damping:18,mass:0.5}}:{scale:1}} style={{willChange:'transform'}}/>)}</div>{error&&<p className="form-error" style={{marginBottom:16}}>{error}</p>}<div className="keypad">{['1','2','3','4','5','6','7','8','9'].map(k=><motion.button key={k} type="button" className="key-btn" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={()=>press(k)}>{k}</motion.button>)}{settings.biometricLock?<motion.button type="button" className="key-btn action" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={triggerBiometrics} title="Unlock with biometrics" disabled={checkingBio}><Fingerprint size={26}/></motion.button>:<motion.button type="button" className="key-btn action" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={()=>setPin('')}>Clear</motion.button>}<motion.button type="button" className="key-btn" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={()=>press('0')}>0</motion.button><motion.button type="button" className="key-btn action" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={backspace} title="Backspace"><Delete size={20}/></motion.button></div></div></motion.div>
+function LockScreen({
+  settings,
+  onUnlock,
+  onResetLock,
+  currentUser
+}: {
+  settings: Settings
+  onUnlock: () => void
+  onResetLock?: () => void
+  currentUser?: AuthUser | null
+}) {
+  const [pin, setPin] = useState('')
+  const [error, setError] = useState('')
+  const [shake, setShake] = useState(false)
+  const [checkingBio, setCheckingBio] = useState(false)
+  const [showForgot, setShowForgot] = useState(false)
+  const [recoveryPassword, setRecoveryPassword] = useState('')
+  const [recoveryError, setRecoveryError] = useState('')
+  const [isRecovering, setIsRecovering] = useState(false)
+
+  const triggerBiometrics = async () => {
+    if (!settings.biometricLock) return
+    setCheckingBio(true)
+    setError('')
+    try {
+      const ok = await security.verifyBiometric()
+      if (ok) onUnlock()
+    } catch {
+    } finally {
+      setCheckingBio(false)
+    }
+  }
+
+  useEffect(() => {
+    if (settings.biometricLock) triggerBiometrics()
+  }, [])
+
+  const press = (num: string) => {
+    if (pin.length >= 4) return
+    const next = pin + num
+    setPin(next)
+    setError('')
+    if (next.length === 4) {
+      if (!settings.appLockPin || security.verifyPin(next, settings.appLockPin)) {
+        setTimeout(() => onUnlock(), 120)
+      } else {
+        setShake(true)
+        setError('Incorrect PIN')
+        setTimeout(() => {
+          setShake(false)
+          setPin('')
+        }, 500)
+      }
+    }
+  }
+
+  const backspace = () => {
+    setPin(p => p.slice(0, -1))
+    setError('')
+  }
+
+  // Keyboard support — useRef avoids stale closure when listener is registered once
+  const pressRef = useRef(press)
+  pressRef.current = press
+  const backspaceRef = useRef(backspace)
+  backspaceRef.current = backspace
+
+  useEffect(() => {
+    if (showForgot) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (/^[0-9]$/.test(e.key)) {
+        e.preventDefault()
+        pressRef.current(e.key)
+      } else if (e.key === 'Backspace' || e.key === 'Delete') {
+        e.preventDefault()
+        backspaceRef.current()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [showForgot])
+
+  const handlePasswordRecovery = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!currentUser?.email || !recoveryPassword.trim()) return
+    setIsRecovering(true)
+    setRecoveryError('')
+    try {
+      await authService.signIn(currentUser.email, recoveryPassword)
+      if (onResetLock) onResetLock()
+      else onUnlock()
+    } catch (err: any) {
+      setRecoveryError(err.message || 'Incorrect password. Please try again.')
+    } finally {
+      setIsRecovering(false)
+    }
+  }
+
+  const handleDirectReset = () => {
+    if (onResetLock) onResetLock()
+    else onUnlock()
+  }
+
+  return (
+    <motion.div
+      className="lock-screen"
+      variants={lockScreenVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+    >
+      <div className={`lock-box ${shake ? 'shake' : ''}`}>
+        <img
+          src={getThemeLogo(settings.theme)}
+          alt="THOGAI"
+          className="lock-brand-logo"
+        />
+
+        {showForgot ? (
+          <div className="lock-recovery">
+            <h1 className="lock-title">Reset App Lock</h1>
+            {currentUser?.email ? (
+              <>
+                <p className="lock-subtitle">
+                  Enter your password for <strong>{currentUser.email}</strong> to verify your account and reset your PIN.
+                </p>
+                <form onSubmit={handlePasswordRecovery} className="lock-recovery-form">
+                  <input
+                    type="password"
+                    className="setting-input"
+                    placeholder="Account password"
+                    value={recoveryPassword}
+                    onChange={e => {
+                      setRecoveryPassword(e.target.value)
+                      setRecoveryError('')
+                    }}
+                    autoFocus
+                    required
+                  />
+                  {recoveryError && <p className="form-error">{recoveryError}</p>}
+                  <div className="lock-recovery-actions">
+                    <button
+                      type="button"
+                      className="button ghost"
+                      onClick={() => {
+                        setShowForgot(false)
+                        setRecoveryPassword('')
+                        setRecoveryError('')
+                      }}
+                    >
+                      Back to PIN
+                    </button>
+                    <button
+                      type="submit"
+                      className="button primary"
+                      disabled={isRecovering || !recoveryPassword}
+                    >
+                      {isRecovering ? 'Verifying...' : 'Reset PIN & Unlock'}
+                    </button>
+                  </div>
+                </form>
+              </>
+            ) : (
+              <>
+                <p className="lock-subtitle">
+                  Forgot your 4-digit PIN? Confirm to reset your App Lock security settings and regain immediate access.
+                </p>
+                <div className="lock-recovery-actions">
+                  <button
+                    type="button"
+                    className="button ghost"
+                    onClick={() => setShowForgot(false)}
+                  >
+                    Back to PIN
+                  </button>
+                  <button
+                    type="button"
+                    className="button primary danger"
+                    onClick={handleDirectReset}
+                  >
+                    Reset PIN & Unlock
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          <>
+            <h1 className="lock-title">THOGAI Locked</h1>
+            <p className="lock-subtitle">
+              {settings.biometricLock ? 'Enter PIN or verify biometrics' : 'Enter 4-digit PIN to continue'}
+            </p>
+            <div className="pin-dots">
+              {[0, 1, 2, 3].map(i => (
+                <motion.div
+                  key={i}
+                  className={`pin-dot ${i < pin.length ? 'filled' : ''}`}
+                  animate={i < pin.length ? { scale: [1, 1.3, 1], transition: { type: 'spring', stiffness: 600, damping: 18, mass: 0.5 } } : { scale: 1 }}
+                  style={{ willChange: 'transform' }}
+                />
+              ))}
+            </div>
+            {error && <p className="form-error" style={{ marginBottom: 16 }}>{error}</p>}
+            <div className="keypad">
+              {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(k => (
+                <motion.button
+                  key={k}
+                  type="button"
+                  className="key-btn"
+                  whileTap={{ scale: 0.88, transition: { type: 'spring', stiffness: 600, damping: 22 } }}
+                  onClick={() => press(k)}
+                >
+                  {k}
+                </motion.button>
+              ))}
+              {settings.biometricLock ? (
+                <motion.button
+                  type="button"
+                  className="key-btn action"
+                  whileTap={{ scale: 0.88, transition: { type: 'spring', stiffness: 600, damping: 22 } }}
+                  onClick={triggerBiometrics}
+                  title="Unlock with biometrics"
+                  disabled={checkingBio}
+                >
+                  <Fingerprint size={26} />
+                </motion.button>
+              ) : (
+                <motion.button
+                  type="button"
+                  className="key-btn action"
+                  whileTap={{ scale: 0.88, transition: { type: 'spring', stiffness: 600, damping: 22 } }}
+                  onClick={() => setPin('')}
+                >
+                  Clear
+                </motion.button>
+              )}
+              <motion.button
+                type="button"
+                className="key-btn"
+                whileTap={{ scale: 0.88, transition: { type: 'spring', stiffness: 600, damping: 22 } }}
+                onClick={() => press('0')}
+              >
+                0
+              </motion.button>
+              <motion.button
+                type="button"
+                className="key-btn action"
+                whileTap={{ scale: 0.88, transition: { type: 'spring', stiffness: 600, damping: 22 } }}
+                onClick={backspace}
+                title="Backspace"
+              >
+                <Delete size={20} />
+              </motion.button>
+            </div>
+            <button
+              type="button"
+              className="lock-forgot-btn"
+              onClick={() => setShowForgot(true)}
+            >
+              Forgot PIN?
+            </button>
+          </>
+        )}
+      </div>
+    </motion.div>
+  )
 }
 
 function PinSetupModal({close,onSave}:{close:()=>void;onSave:(pin:string)=>void}) {

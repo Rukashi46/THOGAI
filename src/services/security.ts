@@ -1,18 +1,39 @@
+import { Capacitor } from '@capacitor/core'
+import { NativeBiometric } from '@capgo/capacitor-native-biometric'
+
 const CRED_KEY = 'thogai.security.biometric_cred_id'
 
 export const security = {
   async isBiometricAvailable(): Promise<boolean> {
     try {
+      if (Capacitor.isNativePlatform()) {
+        const result = await NativeBiometric.isAvailable()
+        return !!result?.isAvailable
+      }
       if (typeof window === 'undefined' || !window.PublicKeyCredential) return false
       if (typeof PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable !== 'function') return false
       return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
-    } catch {
+    } catch (err) {
+      console.warn('isBiometricAvailable error:', err)
       return false
     }
   },
 
   async registerBiometric(): Promise<boolean> {
     try {
+      if (Capacitor.isNativePlatform()) {
+        const check = await NativeBiometric.isAvailable()
+        if (!check.isAvailable) return false
+        await NativeBiometric.verifyIdentity({
+          reason: 'Verify your identity to enable biometric unlock for THOGAI',
+          title: 'Enable Biometric Lock',
+          subtitle: 'Confirm fingerprint or face biometric',
+          negativeButtonText: 'Cancel'
+        })
+        localStorage.setItem(CRED_KEY, 'native_biometric_active')
+        return true
+      }
+
       if (!window.PublicKeyCredential) return false
       const challenge = new Uint8Array(32)
       window.crypto.getRandomValues(challenge)
@@ -53,6 +74,16 @@ export const security = {
 
   async verifyBiometric(): Promise<boolean> {
     try {
+      if (Capacitor.isNativePlatform()) {
+        await NativeBiometric.verifyIdentity({
+          reason: 'Authenticate to access THOGAI',
+          title: 'THOGAI Biometric Unlock',
+          subtitle: 'Confirm your fingerprint or biometric',
+          negativeButtonText: 'Use PIN'
+        })
+        return true
+      }
+
       if (!window.PublicKeyCredential) return false
       const credId = localStorage.getItem(CRED_KEY)
       const challenge = new Uint8Array(32)
