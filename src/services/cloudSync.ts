@@ -1,6 +1,18 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { idbStorage, type QueuedSync } from './idb'
-import { storage, getDefaultTheme, type Budget, type FinanceData, type ReconciliationRecord, type Settings, type Transaction } from './storage'
+import {
+  storage,
+  getDefaultTheme,
+  defaultSettings,
+  defaultExpenseCategories,
+  defaultIncomeCategories,
+  defaultAccounts,
+  type Budget,
+  type FinanceData,
+  type ReconciliationRecord,
+  type Settings,
+  type Transaction
+} from './storage'
 import type { AuthUser } from './auth'
 
 export type SyncState = 'idle' | 'syncing' | 'synced' | 'offline' | 'error'
@@ -161,39 +173,13 @@ class CloudSyncService {
         }
       })
 
-      // Merge transactions with Last-Write-Wins based on updatedAt
+      // 1. Transactions from cloud are the authoritative source of truth for the account
       const txMap = new Map<string, Transaction>()
-      localData.transactions.forEach((t) => txMap.set(t.id, t))
       mappedCloudTx.forEach((ct) => {
-        // If this id was deleted locally more recently than the cloud copy, keep it gone
-        const tombstone = tombstones[ct.id]
-        if (tombstone) {
-          const cloudTime = new Date(ct.updatedAt).getTime()
-          const deletedTime = new Date(tombstone).getTime()
-          if (deletedTime >= cloudTime) return // local delete wins — skip re-adding
-        }
-
-        const local = txMap.get(ct.id)
-        if (!local) {
-          txMap.set(ct.id, ct)
-        } else {
-          // Last-Write-Wins — but preserve local split/repayment fields if cloud version
-          // lacks them (can happen when cloud was written before this fix was deployed)
-          const localTime = new Date(local.updatedAt).getTime()
-          const cloudTime = new Date(ct.updatedAt).getTime()
-          if (cloudTime >= localTime) {
-            // Cloud wins: merge local split fields if cloud is missing them
-            const merged: Transaction = { ...ct }
-            if (!merged.paidFor && local.paidFor) merged.paidFor = local.paidFor
-            if (merged.myShare === undefined && local.myShare !== undefined) merged.myShare = local.myShare
-            if (!merged.splits && local.splits) merged.splits = local.splits
-            if (!merged.repaymentFor && local.repaymentFor) merged.repaymentFor = local.repaymentFor
-            txMap.set(ct.id, merged)
-          }
-        }
+        txMap.set(ct.id, ct)
       })
 
-      // Map cloud budgets to local format
+      // 2. Budgets from cloud
       const mappedCloudBudgets: Budget[] = (cloudBudgets || []).map((b: any) => ({
         id: b.id,
         category: b.category,
@@ -204,42 +190,56 @@ class CloudSyncService {
       }))
 
       const budgetMap = new Map<string, Budget>()
-      localData.budgets.forEach((b) => budgetMap.set(b.id, b))
       mappedCloudBudgets.forEach((cb) => {
-        const local = budgetMap.get(cb.id)
-        if (!local) {
-          budgetMap.set(cb.id, cb)
-        } else {
-          const localTime = new Date(local.updatedAt).getTime()
-          const cloudTime = new Date(cb.updatedAt).getTime()
-          if (cloudTime >= localTime) {
-            budgetMap.set(cb.id, cb)
-          }
-        }
+        budgetMap.set(cb.id, cb)
       })
 
-      // Merge Settings
-      let mergedSettings = { ...localData.settings }
+      // 3. Settings from cloud: restore balance, currency, budget, theme, etc.
+      // Explicitly EXCLUDE pin and app lock so a fresh install or second device is never locked by an old PIN!
+      let mergedSettings: Settings = { ...defaultSettings }
       if (cloudSettings) {
-        // Determine active theme: pinned default theme (device-only) always wins over cloud value
         const pinnedDefault = getDefaultTheme()
-        const resolvedTheme = pinnedDefault ?? cloudSettings.theme ?? mergedSettings.theme
+        const resolvedTheme = pinnedDefault ?? cloudSettings.theme ?? 'navy'
+        const rawNotifs = cloudSettings.notifications || {}
+        const incomeCats = Array.isArray(cloudSettings.income_categories) && cloudSettings.income_categories.length > 0
+          ? cloudSettings.income_categories
+          : Array.isArray(rawNotifs._income_categories) && rawNotifs._income_categories.length > 0
+            ? rawNotifs._income_categories
+            : defaultIncomeCategories
+
         mergedSettings = {
-          ...mergedSettings,
-          name: user.name || cloudSettings.nickname || mergedSettings.name,
-          currency: cloudSettings.currency || mergedSettings.currency,
-          monthlyBudget: Number(cloudSettings.monthly_budget ?? mergedSettings.monthlyBudget),
-          startingBalance: Number(cloudSettings.starting_balance ?? mergedSettings.startingBalance),
-          defaultCategory: cloudSettings.default_category || mergedSettings.defaultCategory,
-          defaultAccount: cloudSettings.default_account || mergedSettings.defaultAccount,
+          name: user.name || rawNotifs._nickname || cloudSettings.nickname || 'User',
+          currency: cloudSettings.currency || 'USD',
+          monthlyBudget: Number(cloudSettings.monthly_budget ?? 0),
+          startingBalance: Number(cloudSettings.starting_balance ?? 0),
+          defaultCategory: cloudSettings.default_category || 'Food & Dining',
+          defaultAccount: cloudSettings.default_account || 'Cash',
           theme: resolvedTheme,
           defaultTheme: pinnedDefault,
-          categories: Array.isArray(cloudSettings.categories) && cloudSettings.categories.length > 0 ? cloudSettings.categories : mergedSettings.categories,
-          incomeCategories: Array.isArray(cloudSettings.income_categories) && cloudSettings.income_categories.length > 0 ? cloudSettings.income_categories : mergedSettings.incomeCategories,
-          accounts: Array.isArray(cloudSettings.accounts) && cloudSettings.accounts.length > 0 ? cloudSettings.accounts : mergedSettings.accounts,
-          notifications: cloudSettings.notifications || mergedSettings.notifications,
-          onboardingCompleted: cloudSettings.onboarding_completed ?? true,
-          nickname: cloudSettings.nickname || mergedSettings.nickname,
+          categories: Array.isArray(cloudSettings.categories) && cloudSettings.categories.length > 0 ? cloudSettings.categories : defaultExpenseCategories,
+          incomeCategories: incomeCats,
+          accounts: Array.isArray(cloudSettings.accounts) && cloudSettings.accounts.length > 0 ? cloudSettings.accounts : defaultAccounts,
+          notifications: {
+            budget: rawNotifs.budget ?? true,
+            dues: rawNotifs.dues ?? true,
+            summary: rawNotifs.summary ?? false
+          },
+          onboardingCompleted: cloudSettings.onboarding_completed ?? rawNotifs._onboarding_completed ?? true,
+          nickname: rawNotifs._nickname || cloudSettings.nickname || '',
+          // Explicitly do NOT restore PIN or app lock from cloud or other devices:
+          appLock: false,
+          appLockPin: '',
+          biometricLock: false,
+          hideBalance: false
+        }
+      } else {
+        mergedSettings = {
+          ...defaultSettings,
+          name: user.name || 'User',
+          appLock: false,
+          appLockPin: '',
+          biometricLock: false,
+          hideBalance: false
         }
       }
 
@@ -378,6 +378,7 @@ class CloudSyncService {
 
     this.setSyncState('syncing')
     try {
+      const rawNotifs = (settings.notifications || { budget: true, dues: true, summary: true }) as any
       const row = {
         user_id: user.id,
         currency: settings.currency,
@@ -387,11 +388,15 @@ class CloudSyncService {
         default_account: settings.defaultAccount,
         theme: settings.theme,
         categories: settings.categories,
-        income_categories: settings.incomeCategories,
         accounts: settings.accounts,
-        notifications: settings.notifications,
-        onboarding_completed: settings.onboardingCompleted,
-        nickname: settings.nickname,
+        notifications: {
+          budget: rawNotifs.budget ?? true,
+          dues: rawNotifs.dues ?? true,
+          summary: rawNotifs.summary ?? false,
+          _income_categories: settings.incomeCategories,
+          _onboarding_completed: settings.onboardingCompleted,
+          _nickname: settings.nickname
+        },
         updated_at: new Date().toISOString()
       }
       const { error } = await supabase.from('user_settings').upsert(row)
@@ -483,6 +488,7 @@ class CloudSyncService {
             }
           } else if (item.entityType === 'settings') {
             const s = item.payload as Settings
+            const rawNotifs = (s.notifications || { budget: true, dues: true, summary: true }) as any
             await supabase.from('user_settings').upsert({
               user_id: user.id,
               currency: s.currency,
@@ -492,11 +498,15 @@ class CloudSyncService {
               default_account: s.defaultAccount,
               theme: s.theme,
               categories: s.categories,
-              income_categories: s.incomeCategories,
               accounts: s.accounts,
-              notifications: s.notifications,
-              onboarding_completed: s.onboardingCompleted,
-              nickname: s.nickname,
+              notifications: {
+                budget: rawNotifs.budget ?? true,
+                dues: rawNotifs.dues ?? true,
+                summary: rawNotifs.summary ?? false,
+                _income_categories: s.incomeCategories,
+                _onboarding_completed: s.onboardingCompleted,
+                _nickname: s.nickname
+              },
               updated_at: new Date().toISOString()
             })
           }

@@ -50,20 +50,20 @@ import { ReconciliationHistoryModal } from './components/ReconciliationHistoryMo
 import { OnboardingModal } from './components/OnboardingModal'
 import { getCashFlowAmount, getPersonalExpenseAmount, getEarnedIncomeAmount, getOutstandingReceivables } from './lib/finance'
 
-type Page = 'home'|'ledger'|'budget'|'stats'|'config'
+type Page = 'home' | 'ledger' | 'budget' | 'stats' | 'config'
 type ModalState =
   | {
-      mode: 'transaction'
-      draft?: Transaction
-      type?: TransactionType
-      category?: string
-      repaymentFor?: {
-        person: string
-        amount?: number
-        splitId?: string
-        originatingTxId?: string
-      }
+    mode: 'transaction'
+    draft?: Transaction
+    type?: TransactionType
+    category?: string
+    repaymentFor?: {
+      person: string
+      amount?: number
+      splitId?: string
+      originatingTxId?: string
     }
+  }
   | { mode: 'budget'; draft?: Budget }
   | { mode: 'ai' }
   | { mode: 'pin_setup'; nextAction?: 'appLock' | 'biometricLock' | 'changePin' }
@@ -262,17 +262,17 @@ function ConfirmModal({
   )
 }
 const navOrder: Page[] = ['home', 'ledger', 'budget', 'stats', 'config']
-const themes: {id:ThemeId;name:string;copy:string}[] = [
-  {id:'navy',name:'Deep Navy & Gold',copy:'Dark navy & warm gold'},
-  {id:'liquid',name:'Midnight Liquid',copy:'Deep violet glass'},
-  {id:'midnight',name:'Green Midnight',copy:'Emerald green glass'},
-  {id:'cream',name:'Cream Clay',copy:'Warm sculptural clay'},
-  {id:'cyan',name:'Graphite Cyan',copy:'Techy cyan glass'},
+const themes: { id: ThemeId; name: string; copy: string }[] = [
+  { id: 'navy', name: 'Deep Navy & Gold', copy: 'Dark navy & warm gold' },
+  { id: 'liquid', name: 'Midnight Liquid', copy: 'Deep violet glass' },
+  { id: 'midnight', name: 'Green Midnight', copy: 'Emerald green glass' },
+  { id: 'cream', name: 'Cream Clay', copy: 'Warm sculptural clay' },
+  { id: 'cyan', name: 'Graphite Cyan', copy: 'Techy cyan glass' },
 ]
-const today = () => new Date().toISOString().slice(0,10)
-const safe = (n:number) => Number.isFinite(n) ? n : 0
+const today = () => new Date().toISOString().slice(0, 10)
+const safe = (n: number) => Number.isFinite(n) ? n : 0
 
-function Brand({small=false, theme}:{small?:boolean; theme?:ThemeId}) {
+function Brand({ small = false, theme }: { small?: boolean; theme?: ThemeId }) {
   const currentTheme = theme || (typeof document !== 'undefined' ? (document.documentElement.dataset.theme as ThemeId) : 'navy') || 'navy'
   return (
     <div className="brand">
@@ -283,9 +283,9 @@ function Brand({small=false, theme}:{small?:boolean; theme?:ThemeId}) {
     </div>
   )
 }
-function IconButton({children,label,onClick,active=false,className=''}:{children:React.ReactNode;label:string;onClick?:(e: React.MouseEvent<HTMLButtonElement>)=>void;active?:boolean;className?:string}) {return <motion.button whileTap={buttonTap} className={`icon-button ${active?'is-active':''} ${className}`} aria-label={label} title={label} onClick={onClick}>{children}</motion.button>}
-function Progress({value,state='normal'}:{value:number;state?:string}) {return <div className="progress" aria-label={`${Math.round(value)}% used`}><motion.span className={`progress-fill ${state}`} initial={{width:0}} animate={{width:`${Math.min(100,Math.max(0,value))}%`}} transition={{ type: 'spring', stiffness: 180, damping: 28, mass: 1.0 }} style={{willChange:'width'}}/></div>}
-function Empty({onAction}:{onAction:(type:TransactionType| 'budget')=>void}) {return <section className="empty"><div className="empty-orbit"><TrendingUp size={30}/></div><h2>Your money story starts here.</h2><p>Set a foundation, then THOGAI will make every month easier to understand.</p><div className="empty-actions"><button className="button primary" onClick={()=>onAction('income')}><ArrowDownLeft size={17}/> Add income</button><button className="button ghost" onClick={()=>onAction('expense')}><Plus size={17}/> Add expense</button></div><button className="text-button" onClick={()=>onAction('budget')}>Set a monthly budget <ChevronRight size={15}/></button></section>}
+function IconButton({ children, label, onClick, active = false, className = '' }: { children: React.ReactNode; label: string; onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void; active?: boolean; className?: string }) { return <motion.button whileTap={buttonTap} className={`icon-button ${active ? 'is-active' : ''} ${className}`} aria-label={label} title={label} onClick={onClick}>{children}</motion.button> }
+function Progress({ value, state = 'normal' }: { value: number; state?: string }) { return <div className="progress" aria-label={`${Math.round(value)}% used`}><motion.span className={`progress-fill ${state}`} initial={{ width: 0 }} animate={{ width: `${Math.min(100, Math.max(0, value))}%` }} transition={{ type: 'spring', stiffness: 180, damping: 28, mass: 1.0 }} style={{ willChange: 'width' }} /></div> }
+function Empty({ onAction }: { onAction: (type: TransactionType | 'budget') => void }) { return <section className="empty"><div className="empty-orbit"><TrendingUp size={30} /></div><h2>Your money story starts here.</h2><p>Set a foundation, then THOGAI will make every month easier to understand.</p><div className="empty-actions"><button className="button primary" onClick={() => onAction('income')}><ArrowDownLeft size={17} /> Add income</button><button className="button ghost" onClick={() => onAction('expense')}><Plus size={17} /> Add expense</button></div><button className="text-button" onClick={() => onAction('budget')}>Set a monthly budget <ChevronRight size={15} /></button></section> }
 
 function formatRelativeTime(date: Date | null | undefined): string {
   if (!date) return ''
@@ -331,11 +331,11 @@ function SyncPill({ state, onClick, lastSynced }: { state: SyncState; onClick: (
 }
 
 function App() {
-  const [data,setData] = useState<FinanceData>(()=>storage.read())
-  const [page,setPage] = useState<Page>('home')
+  const [data, setData] = useState<FinanceData>(() => storage.read())
+  const [page, setPage] = useState<Page>('home')
   const [pageDirection, setPageDirection] = useState<number>(1)
-  const [modal,setModal] = useState<ModalState>(null)
-  const [toast,setToast] = useState('')
+  const [modal, setModal] = useState<ModalState>(null)
+  const [toast, setToast] = useState('')
   const reduced = useReducedMotion()
 
   // Authentication & Cloud Sync States
@@ -356,18 +356,18 @@ function App() {
   })
 
   // Theme synchronization (runs immediately before any render)
-  useEffect(()=>{
-    document.documentElement.dataset.theme=data.settings.theme;
+  useEffect(() => {
+    document.documentElement.dataset.theme = data.settings.theme;
     const lightThemes: ThemeId[] = ['cream']
     document.documentElement.style.colorScheme = lightThemes.includes(data.settings.theme) ? 'light' : 'dark';
     const metaThemeColor = document.querySelector('meta[name="theme-color"]');
     if (metaThemeColor) {
-      const metaColors: Partial<Record<ThemeId,string>> = {
+      const metaColors: Partial<Record<ThemeId, string>> = {
         cream: '#f4ecdc', cyan: '#0d1a1f', liquid: '#0b0b14', navy: '#0d1526', midnight: '#10231e'
       }
       metaThemeColor.setAttribute('content', metaColors[data.settings.theme] ?? '#10231e');
     }
-  },[data.settings.theme])
+  }, [data.settings.theme])
 
   // Session & Cloud Sync Lifecycle
   useEffect(() => {
@@ -389,6 +389,8 @@ function App() {
         setCurrentUser(user)
         cloudSync.setUser(user)
         setShowAuth(false)
+        setIsLocked(false)
+        sessionStorage.removeItem('thogai_unlocked')
         const cached = await idbStorage.loadUserData(user.id)
         if (cached) {
           setData(cached)
@@ -396,22 +398,31 @@ function App() {
         const baseData: FinanceData = cached || {
           transactions: [],
           budgets: [],
-          settings: { ...defaultSettings, name: user.name || '' }
+          settings: { ...defaultSettings, name: user.name || '', appLock: false, appLockPin: '', biometricLock: false }
         }
         let fresh = await cloudSync.pull(user, baseData)
-        // Restore nickname from cloud user profile if local name is blank
-        if (!fresh.settings.name && user.name) {
-          fresh = { ...fresh, settings: { ...fresh.settings, name: user.name } }
+        // Ensure app lock is NOT restored on fresh login
+        fresh = {
+          ...fresh,
+          settings: {
+            ...fresh.settings,
+            appLock: false,
+            appLockPin: '',
+            biometricLock: false,
+            name: fresh.settings.name || user.name || ''
+          }
         }
         setData(fresh)
+        storage.write(fresh)
+        await idbStorage.saveUserData(user.id, fresh)
         const count = await cloudSync.checkGuestDataForMigration(user.id)
         if (count > 0) setMigrationTxCount(count)
 
         // Load reconciliation history
-        idbStorage.getReconciliationHistory(user.id).then(setReconciliationHistory).catch(() => {})
+        idbStorage.getReconciliationHistory(user.id).then(setReconciliationHistory).catch(() => { })
         cloudSync.fetchReconciliationHistory(user).then((cloudH) => {
           if (cloudH && cloudH.length > 0) setReconciliationHistory(cloudH)
-        }).catch(() => {})
+        }).catch(() => { })
 
         // Check if first-time onboarding should be presented
         if (!fresh.settings.onboardingCompleted && fresh.transactions.length === 0) {
@@ -450,10 +461,10 @@ function App() {
           const count = await cloudSync.checkGuestDataForMigration(user.id)
           if (count > 0) setMigrationTxCount(count)
 
-          idbStorage.getReconciliationHistory(user.id).then(setReconciliationHistory).catch(() => {})
+          idbStorage.getReconciliationHistory(user.id).then(setReconciliationHistory).catch(() => { })
           cloudSync.fetchReconciliationHistory(user).then((cloudH) => {
             if (cloudH && cloudH.length > 0) setReconciliationHistory(cloudH)
-          }).catch(() => {})
+          }).catch(() => { })
 
           if (!fresh.settings.onboardingCompleted && fresh.transactions.length === 0) {
             setModal({ mode: 'onboarding' })
@@ -465,7 +476,7 @@ function App() {
             // Local / Offline Mode: load guest IndexedDB
             const guestCached = await idbStorage.loadUserData(null)
             if (guestCached) setData(guestCached)
-            idbStorage.getReconciliationHistory(null).then(setReconciliationHistory).catch(() => {})
+            idbStorage.getReconciliationHistory(null).then(setReconciliationHistory).catch(() => { })
           }
         }
       } catch (err) {
@@ -482,7 +493,7 @@ function App() {
     }
   }, [])
 
-  useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(''),2800);return()=>clearTimeout(t)},[toast]);
+  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(''), 2800); return () => clearTimeout(t) }, [toast]);
 
   const save = (next: FinanceData) => {
     setData(next)
@@ -721,18 +732,29 @@ function App() {
           setCurrentUser(user)
           cloudSync.setUser(user)
           setIsRestoringSession(true)
+          setIsLocked(false)
+          sessionStorage.removeItem('thogai_unlocked')
           try {
             const cached = await idbStorage.loadUserData(user.id)
             const baseData: FinanceData = cached || {
               transactions: [],
               budgets: [],
-              settings: { ...defaultSettings, name: user.name || '' }
+              settings: { ...defaultSettings, name: user.name || '', appLock: false, appLockPin: '', biometricLock: false }
             }
             let fresh = await cloudSync.pull(user, baseData)
-            if (!fresh.settings.name && user.name) {
-              fresh = { ...fresh, settings: { ...fresh.settings, name: user.name } }
+            fresh = {
+              ...fresh,
+              settings: {
+                ...fresh.settings,
+                appLock: false,
+                appLockPin: '',
+                biometricLock: false,
+                name: fresh.settings.name || user.name || ''
+              }
             }
             setData(fresh)
+            storage.write(fresh)
+            await idbStorage.saveUserData(user.id, fresh)
             setShowAuth(false)
             setToast(`Welcome back, ${user.name || 'User'}! Synced from cloud`)
           } catch {
@@ -756,20 +778,20 @@ function App() {
   const syncLabel = !currentUser
     ? 'Stored securely on this device'
     : syncState === 'syncing'
-    ? 'Syncing...'
-    : syncState === 'offline'
-    ? 'Offline'
-    : syncState === 'error'
-    ? 'Sync issue'
-    : 'Cloud synced · Secure'
+      ? 'Syncing...'
+      : syncState === 'offline'
+        ? 'Offline'
+        : syncState === 'error'
+          ? 'Sync issue'
+          : 'Cloud synced · Secure'
 
   const SyncIcon = !currentUser
     ? HardDrive
     : syncState === 'syncing'
-    ? RefreshCw
-    : syncState === 'offline' || syncState === 'error'
-    ? CloudOff
-    : ShieldCheck
+      ? RefreshCw
+      : syncState === 'offline' || syncState === 'error'
+        ? CloudOff
+        : ShieldCheck
 
   return (
     <div className="app-shell">
@@ -1042,7 +1064,7 @@ function App() {
             onSaveRecord={async (record) => {
               await idbStorage.saveReconciliationRecord(currentUser ? currentUser.id : null, record)
               if (currentUser) {
-                await cloudSync.syncReconciliationRecord(record, currentUser).catch(() => {})
+                await cloudSync.syncReconciliationRecord(record, currentUser).catch(() => { })
               }
               setReconciliationHistory((prev) => [record, ...prev.filter((r) => r.id !== record.id)])
             }}
@@ -1074,7 +1096,7 @@ function App() {
               }
               save(nextData)
               if (patch.name && currentUser) {
-                authService.updateProfile(patch.name).catch(() => {})
+                authService.updateProfile(patch.name).catch(() => { })
               }
               setToast('Welcome to THOGAI')
             }}
@@ -1110,8 +1132,8 @@ function App() {
   )
 }
 
-function HomePage({data,snapshot:s,setPage,open,openAi,setSettings}:{data:FinanceData;snapshot:ReturnType<typeof snapshot>;setPage:(p:Page,dir?:number)=>void;open:(t?:TransactionType,c?:string)=>void;openAi:()=>void;setSettings:(p:Partial<Settings>)=>void}) { const h=new Date().getHours(); const greeting=h<12?'Good morning':h<18?'Good afternoon':'Good evening'; const f=(n:number)=>formatMoney(n,data.settings.currency); const has=data.transactions.length>0||data.settings.monthlyBudget>0||data.budgets.length>0; const recent=[...data.transactions].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,4); const state=budgetState(s.expenses,s.budget); const insight=s.budget? s.expenses>s.budget?'Your spending is over your monthly budget.':s.budgetRemaining>0?`You have ${f(s.budgetRemaining)} left in this month’s budget.`:'You have reached this month’s budget.':s.expenses?'Every expense is now part of your financial picture.':'Add your first transaction to see an honest overview.'; return <>{!has?<Empty onAction={(x)=>x==='budget'?setPage('budget',1):open(x)}/>:<div className="home-layout"><section className="hero-area"><div className="greeting"><p>{greeting}{data.settings.name?`, ${data.settings.name}`:''}</p><h1>Let’s make today count.</h1></div><div className="insight insight-clickable" onClick={openAi} role="button" tabIndex={0} title="Tap to ask THOGAI AI"><div className="insight-icon"><TrendingUp size={18}/></div><p>{insight}</p><span className="ai-badge"><Sparkles size={11}/> Ask AI</span></div><motion.section className="balance-card" initial={{opacity:0,scale:.98,y:8}} animate={{opacity:1,scale:1,y:0}} transition={iosSpring}><div className="balance-top"><span>Remaining balance</span><IconButton label={data.settings.hideBalance?'Show balance':'Hide balance'} onClick={()=>setSettings({hideBalance:!data.settings.hideBalance})}>{data.settings.hideBalance?<EyeOff size={18}/>:<Eye size={18}/>}</IconButton></div><h2>{data.settings.hideBalance?'••••••':f(s.balance)}</h2><div className="balance-foot"><span><span className="dot"></span>Available this month</span><span>{s.income?`${Math.round((s.balance/s.income)*100)}% retained`:''}</span></div></motion.section></section><motion.section className="summary-grid" variants={homeSectionContainer} initial="initial" animate="animate"><Metric label="Income" value={f(s.income)} detail="Money in" icon={<ArrowDownLeft size={18}/>} tone="positive"/><Metric label="Expenses" value={f(s.expenses)} detail="Money spent" icon={<ArrowUpRight size={18}/>} tone="negative"/><Metric label="Previous dues" value={f(s.dues)} detail="Separate from expenses" icon={<Landmark size={18}/>} tone="neutral"/><Metric label="Paid out" value={f(s.paidOut)} detail="Expenses + dues" icon={<CircleDollarSign size={18}/>} tone="neutral"/></motion.section><section className="section-block budget-overview"><div className="section-title"><div><p className="eyebrow">Monthly plan</p><h2>Budget overview</h2></div><button className="text-button" onClick={()=>setPage('budget',1)}>Manage <ChevronRight size={15}/></button></div>{s.budget?<><div className="budget-main"><div><strong>{f(s.expenses)} <span>of {f(s.budget)}</span></strong><p>{f(s.budgetRemaining)} remaining</p></div><b className={`percentage ${state}`}>{Math.round(s.budgetUsed)}% used</b></div><Progress value={s.budgetUsed} state={state}/></>:<div className="inline-empty"><p>Give every rupee a job with a monthly budget.</p><button className="button compact" onClick={()=>setPage('budget',1)}>Set budget</button></div>}</section><section className="section-block"><div className="section-title"><div><p className="eyebrow">Spend smarter</p><h2>Quick expense</h2></div><span className="muted">One tap to start</span></div><div className="quick-grid">{['Food & Dining','Groceries','Transport','Fuel','Snacks'].map(c=>{const I=categoryIcons[c]??ReceiptText;return <button key={c} onClick={()=>open('expense',c)}><span><I size={20}/></span>{c}</button>})}</div></section><section className="section-block recent"><div className="section-title"><div><p className="eyebrow">Your activity</p><h2>Recent transactions</h2></div><button className="text-button" onClick={()=>setPage('ledger',1)}>See all <ChevronRight size={15}/></button></div>{recent.length?<motion.div className="transactions mini" variants={listContainerVariants} initial="initial" animate="animate">{recent.map(t=><TransactionRow key={t.id} tx={t} currency={data.settings.currency}/>)}</motion.div>:<p className="muted pad">No transactions yet.</p>}</section></div>}</> }
-function Metric({label,value,detail,icon,tone}:{label:string;value:string;detail:string;icon:React.ReactNode;tone:string}) {return <motion.div className="metric" variants={homeSectionItem}><span className={`metric-icon ${tone}`}>{icon}</span><div><p>{label}</p><strong>{value}</strong><small>{detail}</small></div></motion.div>}
+function HomePage({ data, snapshot: s, setPage, open, openAi, setSettings }: { data: FinanceData; snapshot: ReturnType<typeof snapshot>; setPage: (p: Page, dir?: number) => void; open: (t?: TransactionType, c?: string) => void; openAi: () => void; setSettings: (p: Partial<Settings>) => void }) { const h = new Date().getHours(); const greeting = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'; const f = (n: number) => formatMoney(n, data.settings.currency); const has = data.transactions.length > 0 || data.settings.monthlyBudget > 0 || data.budgets.length > 0; const recent = [...data.transactions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 4); const state = budgetState(s.expenses, s.budget); const insight = s.budget ? s.expenses > s.budget ? 'Your spending is over your monthly budget.' : s.budgetRemaining > 0 ? `You have ${f(s.budgetRemaining)} left in this month’s budget.` : 'You have reached this month’s budget.' : s.expenses ? 'Every expense is now part of your financial picture.' : 'Add your first transaction to see an honest overview.'; return <>{!has ? <Empty onAction={(x) => x === 'budget' ? setPage('budget', 1) : open(x)} /> : <div className="home-layout"><section className="hero-area"><div className="greeting"><p>{greeting}{data.settings.name ? `, ${data.settings.name}` : ''}</p><h1>Let’s make today count.</h1></div><div className="insight insight-clickable" onClick={openAi} role="button" tabIndex={0} title="Tap to ask THOGAI AI"><div className="insight-icon"><TrendingUp size={18} /></div><p>{insight}</p><span className="ai-badge"><Sparkles size={11} /> Ask AI</span></div><motion.section className="balance-card" initial={{ opacity: 0, scale: .98, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={iosSpring}><div className="balance-top"><span>Remaining balance</span><IconButton label={data.settings.hideBalance ? 'Show balance' : 'Hide balance'} onClick={() => setSettings({ hideBalance: !data.settings.hideBalance })}>{data.settings.hideBalance ? <EyeOff size={18} /> : <Eye size={18} />}</IconButton></div><h2>{data.settings.hideBalance ? '••••••' : f(s.balance)}</h2><div className="balance-foot"><span><span className="dot"></span>Available this month</span><span>{s.income ? `${Math.round((s.balance / s.income) * 100)}% retained` : ''}</span></div></motion.section></section><motion.section className="summary-grid" variants={homeSectionContainer} initial="initial" animate="animate"><Metric label="Income" value={f(s.income)} detail="Money in" icon={<ArrowDownLeft size={18} />} tone="positive" /><Metric label="Expenses" value={f(s.expenses)} detail="Money spent" icon={<ArrowUpRight size={18} />} tone="negative" /><Metric label="Previous dues" value={f(s.dues)} detail="Separate from expenses" icon={<Landmark size={18} />} tone="neutral" /><Metric label="Paid out" value={f(s.paidOut)} detail="Expenses + dues" icon={<CircleDollarSign size={18} />} tone="neutral" /></motion.section><section className="section-block budget-overview"><div className="section-title"><div><p className="eyebrow">Monthly plan</p><h2>Budget overview</h2></div><button className="text-button" onClick={() => setPage('budget', 1)}>Manage <ChevronRight size={15} /></button></div>{s.budget ? <><div className="budget-main"><div><strong>{f(s.expenses)} <span>of {f(s.budget)}</span></strong><p>{f(s.budgetRemaining)} remaining</p></div><b className={`percentage ${state}`}>{Math.round(s.budgetUsed)}% used</b></div><Progress value={s.budgetUsed} state={state} /></> : <div className="inline-empty"><p>Give every rupee a job with a monthly budget.</p><button className="button compact" onClick={() => setPage('budget', 1)}>Set budget</button></div>}</section><section className="section-block"><div className="section-title"><div><p className="eyebrow">Spend smarter</p><h2>Quick expense</h2></div><span className="muted">One tap to start</span></div><div className="quick-grid">{['Food & Dining', 'Groceries', 'Transport', 'Fuel', 'Snacks'].map(c => { const I = categoryIcons[c] ?? ReceiptText; return <button key={c} onClick={() => open('expense', c)}><span><I size={20} /></span>{c}</button> })}</div></section><section className="section-block recent"><div className="section-title"><div><p className="eyebrow">Your activity</p><h2>Recent transactions</h2></div><button className="text-button" onClick={() => setPage('ledger', 1)}>See all <ChevronRight size={15} /></button></div>{recent.length ? <motion.div className="transactions mini" variants={listContainerVariants} initial="initial" animate="animate">{recent.map(t => <TransactionRow key={t.id} tx={t} currency={data.settings.currency} />)}</motion.div> : <p className="muted pad">No transactions yet.</p>}</section></div>}</> }
+function Metric({ label, value, detail, icon, tone }: { label: string; value: string; detail: string; icon: React.ReactNode; tone: string }) { return <motion.div className="metric" variants={homeSectionItem}><span className={`metric-icon ${tone}`}>{icon}</span><div><p>{label}</p><strong>{value}</strong><small>{detail}</small></div></motion.div> }
 
 function Ledger({
   transactions,
@@ -1725,7 +1747,7 @@ function StatsPage({ data, setPage }: { data: FinanceData; setPage?: (p: Page, d
   const trendData = months.map(m => monthStats(m))
   const barMax = Math.max(...trendData.map(d => Math.max(d.income, d.expenses)), 1)
 
-  const receivables: Array<{person: string; totalOwed: number; items: Array<{person: string; date: string; description: string; remainingAmount: number; repaidAmount: number; originalAmount: number}>}> = []
+  const receivables: Array<{ person: string; totalOwed: number; items: Array<{ person: string; date: string; description: string; remainingAmount: number; repaidAmount: number; originalAmount: number }> }> = []
   const totalReceivable = 0
 
   const handleMonthSelect = (m: string) => {
@@ -1910,7 +1932,7 @@ function StatsPage({ data, setPage }: { data: FinanceData; setPage?: (p: Page, d
   )
 }
 
-function Bar({label,value,max,tone}:{label:string;value:number;max:number;tone:string}){return <div className="compare-row"><span>{label}</span><div className="compare-track"><motion.i className={tone} initial={{width:0}} animate={{width:`${value/max*100}%`}} transition={{ type:'spring', stiffness:160, damping:26, mass:1.1 }} style={{willChange:'width'}}/></div><b>{value?formatMoney(value):'—'}</b></div>}
+function Bar({ label, value, max, tone }: { label: string; value: number; max: number; tone: string }) { return <div className="compare-row"><span>{label}</span><div className="compare-track"><motion.i className={tone} initial={{ width: 0 }} animate={{ width: `${value / max * 100}%` }} transition={{ type: 'spring', stiffness: 160, damping: 26, mass: 1.1 }} style={{ willChange: 'width' }} /></div><b>{value ? formatMoney(value) : '—'}</b></div> }
 
 function ConfigPage({
   data,
@@ -1941,13 +1963,13 @@ function ConfigPage({
   onShowAuth: () => void
   askConfirm: (opts: Omit<ConfirmDialogState, 'onCancel'> & { onCancel?: () => void }) => void
 }) {
-  const input=useRef<HTMLInputElement>(null);
+  const input = useRef<HTMLInputElement>(null);
   const activeExpenseCategories = data.settings.categories || defaultExpenseCategories;
   const activeIncomeCategories = data.settings.incomeCategories || defaultIncomeCategories;
   const activeAccounts = data.settings.accounts || defaultAccounts;
 
-  const exportData=()=>{const blob=new Blob([storage.export(data)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`thogai-backup-${today()}.json`;a.click();URL.revokeObjectURL(a.href);toast('Your data was exported')};
-  const importData=(file?:File)=>{if(!file)return;const reader=new FileReader();reader.onload=()=>{try{save(storage.import(String(reader.result)));toast('Backup imported successfully')}catch(e){toast(e instanceof Error?e.message:'Import failed')}};reader.readAsText(file)};
+  const exportData = () => { const blob = new Blob([storage.export(data)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `thogai-backup-${today()}.json`; a.click(); URL.revokeObjectURL(a.href); toast('Your data was exported') };
+  const importData = (file?: File) => { if (!file) return; const reader = new FileReader(); reader.onload = () => { try { save(storage.import(String(reader.result))); toast('Backup imported successfully') } catch (e) { toast(e instanceof Error ? e.message : 'Import failed') } }; reader.readAsText(file) };
   const clear = () => {
     const isSignedIn = Boolean(currentUser)
     askConfirm({
@@ -1978,7 +2000,7 @@ function ConfigPage({
       }
     })
   }
-  const setDefaultAcc=(acc:string)=>{setSettings({defaultAccount:acc});toast(`Default account set to ${acc}`)};
+  const setDefaultAcc = (acc: string) => { setSettings({ defaultAccount: acc }); toast(`Default account set to ${acc}`) };
 
   return (
     <div className="config-page">
@@ -2010,12 +2032,12 @@ function ConfigPage({
                 {syncState === 'syncing'
                   ? 'Syncing...'
                   : syncState === 'synced'
-                  ? 'Synced'
-                  : syncState === 'offline'
-                  ? 'Offline'
-                  : syncState === 'error'
-                  ? 'Sync issue'
-                  : 'Synced'}
+                    ? 'Synced'
+                    : syncState === 'offline'
+                      ? 'Offline'
+                      : syncState === 'error'
+                        ? 'Sync issue'
+                        : 'Synced'}
               </strong>
               {lastSyncedAt && (
                 <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--muted)', fontWeight: 500 }}>
@@ -2078,7 +2100,7 @@ function ConfigPage({
       </ConfigSection>
 
       <ConfigSection title="Profile">
-        <SettingRow icon={<CircleDollarSign size={18}/>} title="Your name" detail="Personalize your greeting">
+        <SettingRow icon={<CircleDollarSign size={18} />} title="Your name" detail="Personalize your greeting">
           <input
             className="setting-input"
             value={data.settings.name}
@@ -2086,15 +2108,15 @@ function ConfigPage({
             onBlur={e => {
               const name = e.target.value.trim()
               if (currentUser && name) {
-                authService.updateProfile(name).catch(() => {})
+                authService.updateProfile(name).catch(() => { })
               }
             }}
             placeholder="Add name"
           />
         </SettingRow>
-        <SettingRow icon={<WalletCards size={18}/>} title="Currency" detail="Used throughout THOGAI">
-          <div style={{minWidth:160,maxWidth:190}}>
-            <ThemedSelect compact value={data.settings.currency} onChange={v=>setSettings({currency:v})} options={currencies.map(c=>({value:c.code,label:`${c.symbol} — ${c.name}`}))}/>
+        <SettingRow icon={<WalletCards size={18} />} title="Currency" detail="Used throughout THOGAI">
+          <div style={{ minWidth: 160, maxWidth: 190 }}>
+            <ThemedSelect compact value={data.settings.currency} onChange={v => setSettings({ currency: v })} options={currencies.map(c => ({ value: c.code, label: `${c.symbol} — ${c.name}` }))} />
           </div>
         </SettingRow>
         <button className="data-action" onClick={() => setModal({ mode: 'onboarding' })}>
@@ -2108,37 +2130,37 @@ function ConfigPage({
       </ConfigSection>
 
       <ConfigSection title="Finance Defaults">
-        <SettingRow icon={<Landmark size={18}/>} title="Starting balance" detail="Your balance before tracked activity">
-          <input className="setting-input amount" type="number" inputMode="decimal" value={data.settings.startingBalance||''} onChange={e=>setSettings({startingBalance:safe(Number(e.target.value))})} placeholder="0"/>
+        <SettingRow icon={<Landmark size={18} />} title="Starting balance" detail="Your balance before tracked activity">
+          <input className="setting-input amount" type="number" inputMode="decimal" value={data.settings.startingBalance || ''} onChange={e => setSettings({ startingBalance: safe(Number(e.target.value)) })} placeholder="0" />
         </SettingRow>
-        <SettingRow icon={<ReceiptText size={18}/>} title="Default category" detail="Preselected for new expenses">
-          <div style={{minWidth:140,maxWidth:175}}>
-            <ThemedSelect compact value={data.settings.defaultCategory} onChange={v=>setSettings({defaultCategory:v})} options={activeExpenseCategories.map(c=>{const I=categoryIcons[c]||ReceiptText;return{value:c,label:c,icon:<I size={14}/>}})}/>
+        <SettingRow icon={<ReceiptText size={18} />} title="Default category" detail="Preselected for new expenses">
+          <div style={{ minWidth: 140, maxWidth: 175 }}>
+            <ThemedSelect compact value={data.settings.defaultCategory} onChange={v => setSettings({ defaultCategory: v })} options={activeExpenseCategories.map(c => { const I = categoryIcons[c] || ReceiptText; return { value: c, label: c, icon: <I size={14} /> } })} />
           </div>
         </SettingRow>
-        <SettingRow icon={<WalletCards size={18}/>} title="Default account" detail="Preselected spend type">
-          <div style={{minWidth:140,maxWidth:175}}>
-            <ThemedSelect compact value={data.settings.defaultAccount||'Cash'} onChange={v=>setDefaultAcc(v)} options={activeAccounts.map(a=>{const I=accountIcons[a]||WalletCards;return{value:a,label:a,icon:<I size={14}/>}})}/>
+        <SettingRow icon={<WalletCards size={18} />} title="Default account" detail="Preselected spend type">
+          <div style={{ minWidth: 140, maxWidth: 175 }}>
+            <ThemedSelect compact value={data.settings.defaultAccount || 'Cash'} onChange={v => setDefaultAcc(v)} options={activeAccounts.map(a => { const I = accountIcons[a] || WalletCards; return { value: a, label: a, icon: <I size={14} /> } })} />
           </div>
         </SettingRow>
       </ConfigSection>
 
       <ConfigSection title="Categories & Accounts">
-        <button type="button" className="data-action" onClick={()=>setModal({mode:'categories'})}>
-          <ReceiptText size={18}/>
+        <button type="button" className="data-action" onClick={() => setModal({ mode: 'categories' })}>
+          <ReceiptText size={18} />
           <span>
             <strong>Edit categories</strong>
             <small>{activeExpenseCategories.length} expense · {activeIncomeCategories.length} income</small>
           </span>
-          <ChevronRight size={17}/>
+          <ChevronRight size={17} />
         </button>
-        <button type="button" className="data-action" onClick={()=>setModal({mode:'accounts'})}>
-          <WalletCards size={18}/>
+        <button type="button" className="data-action" onClick={() => setModal({ mode: 'accounts' })}>
+          <WalletCards size={18} />
           <span>
             <strong>Accounts & payment methods</strong>
-            <small>{activeAccounts.length} accounts · Default: {data.settings.defaultAccount||'Cash'}</small>
+            <small>{activeAccounts.length} accounts · Default: {data.settings.defaultAccount || 'Cash'}</small>
           </span>
-          <ChevronRight size={17}/>
+          <ChevronRight size={17} />
         </button>
       </ConfigSection>
 
@@ -2146,14 +2168,14 @@ function ConfigPage({
         <div className="mb-4">
           <label className="text-xs font-semibold text-muted uppercase tracking-wider block mb-2">Theme & appearance</label>
           <div className="theme-scroller">
-            {themes.map(t=>(
-              <button key={t.id} className={`theme-card ${t.id} ${data.settings.theme===t.id?'selected':''}`} onClick={()=>setSettings({theme:t.id})}>
+            {themes.map(t => (
+              <button key={t.id} className={`theme-card ${t.id} ${data.settings.theme === t.id ? 'selected' : ''}`} onClick={() => setSettings({ theme: t.id })}>
                 <img src={getThemeLogo(t.id)} alt={t.name} className="theme-card-thumb" />
-                <div style={{minWidth:0,flex:1}}>
+                <div style={{ minWidth: 0, flex: 1 }}>
                   <strong>{t.name}</strong>
                   <small>{t.copy}</small>
                 </div>
-                {data.settings.theme===t.id&&<b><Check size={13}/></b>}
+                {data.settings.theme === t.id && <b><Check size={13} /></b>}
               </button>
             ))}
           </div>
@@ -2161,69 +2183,69 @@ function ConfigPage({
           <div className="default-theme-row">
             <span className="default-theme-label">
               <strong>Keep this theme on every login</strong>
-              <small>{data.settings.defaultTheme ? `Pinned: ${themes.find(t=>t.id===data.settings.defaultTheme)?.name ?? data.settings.defaultTheme}` : 'Theme may change when syncing from cloud'}</small>
+              <small>{data.settings.defaultTheme ? `Pinned: ${themes.find(t => t.id === data.settings.defaultTheme)?.name ?? data.settings.defaultTheme}` : 'Theme may change when syncing from cloud'}</small>
             </span>
             <button
               className={`button compact ${data.settings.defaultTheme ? 'primary' : 'secondary'}`}
-              onClick={()=>{
+              onClick={() => {
                 const pinned = data.settings.defaultTheme
                 const newPin = pinned ? null : data.settings.theme
                 setDefaultTheme(newPin)
                 setSettings({ defaultTheme: newPin })
-                toast(newPin ? `${themes.find(t=>t.id===newPin)?.name} set as default theme` : 'Default theme cleared')
+                toast(newPin ? `${themes.find(t => t.id === newPin)?.name} set as default theme` : 'Default theme cleared')
               }}
             >
-              {data.settings.defaultTheme ? <><Check size={13}/> Pinned</> : 'Pin as default'}
+              {data.settings.defaultTheme ? <><Check size={13} /> Pinned</> : 'Pin as default'}
             </button>
           </div>
         </div>
 
         <div className="mb-4 pt-3 border-t border-border-subtle">
           <label className="text-xs font-semibold text-muted uppercase tracking-wider block mb-2">Security</label>
-          <ToggleRow title="App lock" detail={data.settings.appLockPin?"Require 4-digit PIN on app open":"Set up 4-digit PIN lock"} on={data.settings.appLock} set={(v)=>{if(v){if(data.settings.appLockPin){setSettings({appLock:true});toast('App Lock enabled')}else{setModal({mode:'pin_setup',nextAction:'appLock'})}}else{setSettings({appLock:false});toast('App Lock disabled')}}}/>
+          <ToggleRow title="App lock" detail={data.settings.appLockPin ? "Require 4-digit PIN on app open" : "Set up 4-digit PIN lock"} on={data.settings.appLock} set={(v) => { if (v) { if (data.settings.appLockPin) { setSettings({ appLock: true }); toast('App Lock enabled') } else { setModal({ mode: 'pin_setup', nextAction: 'appLock' }) } } else { setSettings({ appLock: false }); toast('App Lock disabled') } }} />
           <ToggleRow
             title="Biometric lock"
             detail="Unlock with Fingerprint, Face ID or Biometrics"
             on={data.settings.biometricLock}
-            set={async(v)=>{
-              if(v){
-                const available=await security.isBiometricAvailable();
-                if(!available){
+            set={async (v) => {
+              if (v) {
+                const available = await security.isBiometricAvailable();
+                if (!available) {
                   toast('Biometric authentication is not supported or not enrolled on this device');
                   return;
                 }
-                if(!data.settings.appLockPin){
+                if (!data.settings.appLockPin) {
                   toast('Please set an App PIN first as backup');
-                  setModal({mode:'pin_setup',nextAction:'biometricLock'});
+                  setModal({ mode: 'pin_setup', nextAction: 'biometricLock' });
                   return;
                 }
-                const reg=await security.registerBiometric();
-                if(reg){
-                  setSettings({biometricLock:true});
+                const reg = await security.registerBiometric();
+                if (reg) {
+                  setSettings({ biometricLock: true });
                   toast('Biometric lock enabled');
-                }else{
+                } else {
                   toast('Biometric authentication was cancelled');
                 }
-              }else{
-                setSettings({biometricLock:false});
+              } else {
+                setSettings({ biometricLock: false });
                 toast('Biometric lock disabled');
               }
             }}
           />
-          {data.settings.appLockPin&&<SettingRow icon={<KeyRound size={18}/>} title="Change PIN" detail="Update your 4-digit security code"><button className="button compact ghost" onClick={()=>setModal({mode:'pin_setup',nextAction:'changePin'})}>Change PIN</button></SettingRow>}
-          {(data.settings.appLock||data.settings.biometricLock)&&<button className="data-action" onClick={()=>{sessionStorage.removeItem('thogai_unlocked');setIsLocked(true)}}><LockKeyhole size={18}/><span><strong>Lock App Now</strong><small>Return to secure lock screen immediately</small></span><ChevronRight size={17}/></button>}
+          {data.settings.appLockPin && <SettingRow icon={<KeyRound size={18} />} title="Change PIN" detail="Update your 4-digit security code"><button className="button compact ghost" onClick={() => setModal({ mode: 'pin_setup', nextAction: 'changePin' })}>Change PIN</button></SettingRow>}
+          {(data.settings.appLock || data.settings.biometricLock) && <button className="data-action" onClick={() => { sessionStorage.removeItem('thogai_unlocked'); setIsLocked(true) }}><LockKeyhole size={18} /><span><strong>Lock App Now</strong><small>Return to secure lock screen immediately</small></span><ChevronRight size={17} /></button>}
         </div>
 
         <div className="mb-4 pt-3 border-t border-border-subtle">
           <label className="text-xs font-semibold text-muted uppercase tracking-wider block mb-2">AI Advisor</label>
-          <button className="data-action" onClick={()=>setModal({mode:'ai'})}><Bot size={18}/><span><strong>Open AI Advisor</strong><small>Ask questions about your spending, budget & savings</small></span><ChevronRight size={17}/></button>
+          <button className="data-action" onClick={() => setModal({ mode: 'ai' })}><Bot size={18} /><span><strong>Open AI Advisor</strong><small>Ask questions about your spending, budget & savings</small></span><ChevronRight size={17} /></button>
         </div>
 
         <div className="mb-4 pt-3 border-t border-border-subtle">
           <label className="text-xs font-semibold text-muted uppercase tracking-wider block mb-2">Notifications</label>
-          <ToggleRow title="Budget alerts" detail="When you approach a limit" on={data.settings.notifications.budget} set={v=>setSettings({notifications:{...data.settings.notifications,budget:v}})}/>
-          <ToggleRow title="Due reminders" detail="Keep outstanding payments visible" on={data.settings.notifications.dues} set={v=>setSettings({notifications:{...data.settings.notifications,dues:v}})}/>
-          <ToggleRow title="Monthly summaries" detail="A fresh financial recap" on={data.settings.notifications.summary} set={v=>setSettings({notifications:{...data.settings.notifications,summary:v}})}/>
+          <ToggleRow title="Budget alerts" detail="When you approach a limit" on={data.settings.notifications.budget} set={v => setSettings({ notifications: { ...data.settings.notifications, budget: v } })} />
+          <ToggleRow title="Due reminders" detail="Keep outstanding payments visible" on={data.settings.notifications.dues} set={v => setSettings({ notifications: { ...data.settings.notifications, dues: v } })} />
+          <ToggleRow title="Monthly summaries" detail="A fresh financial recap" on={data.settings.notifications.summary} set={v => setSettings({ notifications: { ...data.settings.notifications, summary: v } })} />
         </div>
 
         <div className="mb-4 pt-3 border-t border-border-subtle">
@@ -2248,10 +2270,10 @@ function ConfigPage({
 
         <div className="pt-3 border-t border-border-subtle">
           <label className="text-xs font-semibold text-muted uppercase tracking-wider block mb-2">Data & Backup</label>
-          <button className="data-action" onClick={exportData}><Download size={18}/><span><strong>Export data</strong><small>Save a complete THOGAI backup</small></span><ChevronRight size={17}/></button>
-          <button className="data-action" onClick={()=>input.current?.click()}><FileUp size={18}/><span><strong>Import data</strong><small>Restore from a THOGAI backup</small></span><ChevronRight size={17}/></button>
-          <input ref={input} hidden type="file" accept="application/json" onChange={e=>importData(e.target.files?.[0])}/>
-          <button className="data-action delete" onClick={clear}><Trash2 size={18}/><span><strong>Clear local data</strong><small>Remove all transactions and settings</small></span><ChevronRight size={17}/></button>
+          <button className="data-action" onClick={exportData}><Download size={18} /><span><strong>Export data</strong><small>Save a complete THOGAI backup</small></span><ChevronRight size={17} /></button>
+          <button className="data-action" onClick={() => input.current?.click()}><FileUp size={18} /><span><strong>Import data</strong><small>Restore from a THOGAI backup</small></span><ChevronRight size={17} /></button>
+          <input ref={input} hidden type="file" accept="application/json" onChange={e => importData(e.target.files?.[0])} />
+          <button className="data-action delete" onClick={clear}><Trash2 size={18} /><span><strong>Clear local data</strong><small>Remove all transactions and settings</small></span><ChevronRight size={17} /></button>
         </div>
       </ConfigSection>
 
@@ -2277,9 +2299,9 @@ function ConfigPage({
     </div>
   );
 }
-function ConfigSection({title,children}:{title:string;children:React.ReactNode}){return <section className="config-section"><p className="eyebrow">{title}</p><div className="settings-group">{children}</div></section>}
-function SettingRow({icon,title,detail,children}:{icon:React.ReactNode;title:string;detail:string;children:React.ReactNode}){return <div className="setting-row"><span className="setting-icon">{icon}</span><div><strong>{title}</strong><small>{detail}</small></div>{children}</div>}
-function ToggleRow({title,detail,on,set}:{title:string;detail:string;on:boolean;set:(v:boolean)=>void}){return <div className="toggle-row"><div><strong>{title}</strong><small>{detail}</small></div><button className={`toggle ${on?'on':''}`} onClick={()=>set(!on)} aria-label={`Toggle ${title}`} aria-pressed={on}><i/></button></div>}
+function ConfigSection({ title, children }: { title: string; children: React.ReactNode }) { return <section className="config-section"><p className="eyebrow">{title}</p><div className="settings-group">{children}</div></section> }
+function SettingRow({ icon, title, detail, children }: { icon: React.ReactNode; title: string; detail: string; children: React.ReactNode }) { return <div className="setting-row"><span className="setting-icon">{icon}</span><div><strong>{title}</strong><small>{detail}</small></div>{children}</div> }
+function ToggleRow({ title, detail, on, set }: { title: string; detail: string; on: boolean; set: (v: boolean) => void }) { return <div className="toggle-row"><div><strong>{title}</strong><small>{detail}</small></div><button className={`toggle ${on ? 'on' : ''}`} onClick={() => set(!on)} aria-label={`Toggle ${title}`} aria-pressed={on}><i /></button></div> }
 
 function TransactionModal({
   initial,
@@ -2505,8 +2527,8 @@ function TransactionModal({
                 {isSplitOverAllocated
                   ? `Over by ${currencySymbol}${(sumFriends - totalAmt).toFixed(2)}`
                   : Math.abs(derivedMyShare) < 0.01
-                  ? 'Fully allocated'
-                  : `${currencySymbol}${derivedMyShare.toFixed(2)} is your share`}
+                    ? 'Fully allocated'
+                    : `${currencySymbol}${derivedMyShare.toFixed(2)} is your share`}
               </div>
 
               {/* Friend rows */}
@@ -2690,17 +2712,17 @@ function TransactionModal({
     </Modal>
   )
 }
-function BudgetModal({initial,currency,categories:cats,close,submit}:{initial?:Budget;currency:string;categories:string[];close:()=>void;submit:(category:string,limit:number,id?:string)=>void}) {
-  const [category,setCategory]=useState(initial?.category??cats[0]??'Food');
-  const [limit,setLimit]=useState(initial?.limit?String(initial.limit):'');
-  const [error,setError]=useState('');
-  const save=()=>{
-    const n=Number(limit);
-    if(!Number.isFinite(n)||n<=0)return setError('Enter a monthly limit greater than zero.');
-    submit(category,n,initial?.id);
+function BudgetModal({ initial, currency, categories: cats, close, submit }: { initial?: Budget; currency: string; categories: string[]; close: () => void; submit: (category: string, limit: number, id?: string) => void }) {
+  const [category, setCategory] = useState(initial?.category ?? cats[0] ?? 'Food');
+  const [limit, setLimit] = useState(initial?.limit ? String(initial.limit) : '');
+  const [error, setError] = useState('');
+  const save = () => {
+    const n = Number(limit);
+    if (!Number.isFinite(n) || n <= 0) return setError('Enter a monthly limit greater than zero.');
+    submit(category, n, initial?.id);
   };
   return (
-    <Modal close={close} title={initial?'Edit category budget':'Add category budget'}>
+    <Modal close={close} title={initial ? 'Edit category budget' : 'Add category budget'}>
       <p className="modal-intro">A budget uses your actual expense entries to show what’s left.</p>
       <label>
         Category
@@ -2708,21 +2730,21 @@ function BudgetModal({initial,currency,categories:cats,close,submit}:{initial?:B
           searchable
           searchPlaceholder="Type to filter categories..."
           value={category}
-          onChange={v=>setCategory(v)}
-          options={cats.map(c=>{const I=categoryIcons[c]||ReceiptText;return{value:c,label:c,icon:<I size={14}/>}})}
+          onChange={v => setCategory(v)}
+          options={cats.map(c => { const I = categoryIcons[c] || ReceiptText; return { value: c, label: c, icon: <I size={14} /> } })}
         />
       </label>
       <label className="amount-field">
         <span>Monthly limit</span>
         <div>
-          <b>{currencies.find(c=>c.code===currency)?.symbol??'₹'}</b>
-          <input autoFocus type="number" inputMode="decimal" min="0" value={limit} onChange={e=>setLimit(e.target.value)} placeholder="0"/>
+          <b>{currencies.find(c => c.code === currency)?.symbol ?? '₹'}</b>
+          <input autoFocus type="number" inputMode="decimal" min="0" value={limit} onChange={e => setLimit(e.target.value)} placeholder="0" />
         </div>
       </label>
-      {error&&<p className="form-error">{error}</p>}
+      {error && <p className="form-error">{error}</p>}
       <div className="modal-actions">
         <button className="button ghost" onClick={close}>Cancel</button>
-        <button className="button primary" onClick={save}>{initial?'Save budget':'Add budget'}</button>
+        <button className="button primary" onClick={save}>{initial ? 'Save budget' : 'Add budget'}</button>
       </div>
     </Modal>
   );
@@ -3044,60 +3066,60 @@ function LockScreen({
   )
 }
 
-function PinSetupModal({close,onSave}:{close:()=>void;onSave:(pin:string)=>void}) {
- const [step,setStep]=useState<'create'|'confirm'>('create'); const [pin,setPin]=useState(''); const [firstPin,setFirstPin]=useState(''); const [error,setError]=useState(''); const [shake,setShake]=useState(false);
- const press=(num:string)=>{if(pin.length>=4)return;const next=pin+num;setPin(next);setError('');if(next.length===4){if(step==='create'){setTimeout(()=>{setFirstPin(next);setPin('');setStep('confirm')},180)}else{if(next===firstPin){setTimeout(()=>onSave(next),180)}else{setShake(true);setError('PINs did not match. Try again.');setTimeout(()=>{setShake(false);setPin('');setFirstPin('');setStep('create')},600)}}}};
- const backspace=()=>{setPin(p=>p.slice(0,-1));setError('')};
- // Keyboard: digit keys, Backspace, Escape — useRef avoids stale closure
- const pressRef2=useRef(press); pressRef2.current=press;
- const backspaceRef2=useRef(backspace); backspaceRef2.current=backspace;
- const closeRef=useRef(close); closeRef.current=close;
- useEffect(()=>{
-   const onKey=(e:KeyboardEvent)=>{
-     if(e.metaKey||e.ctrlKey||e.altKey)return;
-     if(/^[0-9]$/.test(e.key)){e.preventDefault();pressRef2.current(e.key)}
-     else if(e.key==='Backspace'||e.key==='Delete'){e.preventDefault();backspaceRef2.current()}
-     else if(e.key==='Escape'){e.preventDefault();closeRef.current()}
-   };
-   window.addEventListener('keydown',onKey);
-   return ()=>window.removeEventListener('keydown',onKey);
- // eslint-disable-next-line react-hooks/exhaustive-deps
- },[]);
- return <Modal close={close} title={step==='create'?'Set 4-digit PIN':'Confirm 4-digit PIN'}><div className={`lock-box ${shake?'shake':''}`} style={{margin:'8px auto'}}><p className="modal-intro" style={{textAlign:'center',marginBottom:18}}>{step==='create'?'Choose a 4-digit PIN to secure your financial records.':'Re-enter the same 4-digit PIN to confirm.'}</p><div className="pin-dots">{[0,1,2,3].map(i=><motion.div key={i} className={`pin-dot ${i<pin.length?'filled':''}`} animate={i<pin.length?{scale:[1,1.3,1],transition:{type:'spring',stiffness:600,damping:18,mass:0.5}}:{scale:1}} style={{willChange:'transform'}}/>)}</div>{error&&<p className="form-error" style={{marginBottom:14}}>{error}</p>}<div className="keypad">{['1','2','3','4','5','6','7','8','9'].map(k=><motion.button key={k} type="button" className="key-btn" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={()=>press(k)}>{k}</motion.button>)}<motion.button type="button" className="key-btn action" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={()=>setPin('')}>Clear</motion.button><motion.button type="button" className="key-btn" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={()=>press('0')}>0</motion.button><motion.button type="button" className="key-btn action" whileTap={{scale:0.88,transition:{type:'spring',stiffness:600,damping:22}}} onClick={backspace} title="Backspace"><Delete size={20}/></motion.button></div></div></Modal>
+function PinSetupModal({ close, onSave }: { close: () => void; onSave: (pin: string) => void }) {
+  const [step, setStep] = useState<'create' | 'confirm'>('create'); const [pin, setPin] = useState(''); const [firstPin, setFirstPin] = useState(''); const [error, setError] = useState(''); const [shake, setShake] = useState(false);
+  const press = (num: string) => { if (pin.length >= 4) return; const next = pin + num; setPin(next); setError(''); if (next.length === 4) { if (step === 'create') { setTimeout(() => { setFirstPin(next); setPin(''); setStep('confirm') }, 180) } else { if (next === firstPin) { setTimeout(() => onSave(next), 180) } else { setShake(true); setError('PINs did not match. Try again.'); setTimeout(() => { setShake(false); setPin(''); setFirstPin(''); setStep('create') }, 600) } } } };
+  const backspace = () => { setPin(p => p.slice(0, -1)); setError('') };
+  // Keyboard: digit keys, Backspace, Escape — useRef avoids stale closure
+  const pressRef2 = useRef(press); pressRef2.current = press;
+  const backspaceRef2 = useRef(backspace); backspaceRef2.current = backspace;
+  const closeRef = useRef(close); closeRef.current = close;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (/^[0-9]$/.test(e.key)) { e.preventDefault(); pressRef2.current(e.key) }
+      else if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); backspaceRef2.current() }
+      else if (e.key === 'Escape') { e.preventDefault(); closeRef.current() }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return <Modal close={close} title={step === 'create' ? 'Set 4-digit PIN' : 'Confirm 4-digit PIN'}><div className={`lock-box ${shake ? 'shake' : ''}`} style={{ margin: '8px auto' }}><p className="modal-intro" style={{ textAlign: 'center', marginBottom: 18 }}>{step === 'create' ? 'Choose a 4-digit PIN to secure your financial records.' : 'Re-enter the same 4-digit PIN to confirm.'}</p><div className="pin-dots">{[0, 1, 2, 3].map(i => <motion.div key={i} className={`pin-dot ${i < pin.length ? 'filled' : ''}`} animate={i < pin.length ? { scale: [1, 1.3, 1], transition: { type: 'spring', stiffness: 600, damping: 18, mass: 0.5 } } : { scale: 1 }} style={{ willChange: 'transform' }} />)}</div>{error && <p className="form-error" style={{ marginBottom: 14 }}>{error}</p>}<div className="keypad">{['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(k => <motion.button key={k} type="button" className="key-btn" whileTap={{ scale: 0.88, transition: { type: 'spring', stiffness: 600, damping: 22 } }} onClick={() => press(k)}>{k}</motion.button>)}<motion.button type="button" className="key-btn action" whileTap={{ scale: 0.88, transition: { type: 'spring', stiffness: 600, damping: 22 } }} onClick={() => setPin('')}>Clear</motion.button><motion.button type="button" className="key-btn" whileTap={{ scale: 0.88, transition: { type: 'spring', stiffness: 600, damping: 22 } }} onClick={() => press('0')}>0</motion.button><motion.button type="button" className="key-btn action" whileTap={{ scale: 0.88, transition: { type: 'spring', stiffness: 600, damping: 22 } }} onClick={backspace} title="Backspace"><Delete size={20} /></motion.button></div></div></Modal>
 }
 
-function AiModal({data,close}:{data:FinanceData;close:()=>void}) {
- const ctx=useMemo(()=>buildFinancialContext(data.transactions,data.budgets,data.settings),[data]);
- const [messages,setMessages]=useState<{sender:'user'|'bot';text:string;isOffline?:boolean}[]>(()=>[{sender:'bot',text:generateLocalAiResponse('overview',ctx)}]);
- const [input,setInput]=useState(''); const [loading,setLoading]=useState(false); const chatBottomRef=useRef<HTMLDivElement>(null);
- useEffect(()=>{chatBottomRef.current?.scrollIntoView({behavior:'smooth'})},[messages,loading]);
- const send=async(queryText?:string)=>{
-   const textToSend=(queryText||input).trim(); if(!textToSend||loading)return;
-   setInput('');
-   const newMessages = [...messages, { sender:'user' as const, text:textToSend }];
-   setMessages(newMessages);
-   setLoading(true);
-   try{
-     const historyTurns: ConversationTurn[] = newMessages.map(m => ({
-       role: m.sender === 'user' ? 'user' : 'model',
-       text: m.text
-     }));
-     const result = await queryAiAdvisor(textToSend, historyTurns, ctx);
-     setMessages(prev=>[...prev,{sender:'bot',text:result.text,isOffline:result.isOffline}]);
-   }catch{
-     const fallback = generateLocalAiResponse(textToSend,ctx) || 'Unable to get advice right now. Please try again.';
-     setMessages(prev=>[...prev,{sender:'bot',text:fallback,isOffline:true}]);
-   }finally{
-     setLoading(false);
-   }
- };
- const quickActions = [
-   { label: '50/30/20 Budget', prompt: 'Generate 50/30/20 Budget' },
-   { label: 'Spending Analysis', prompt: 'Analyze Spending Trends' },
-   { label: 'Savings Goal', prompt: 'Simulate Savings Goal' },
-   { label: 'Debt Strategy', prompt: 'Debt Payoff Strategy' }
- ];
- return <Modal close={close} title="AI Advisor"><div className="ai-modal"><div className="ai-chips">{quickActions.map(q=><button key={q.label} type="button" className="ai-chip" onClick={()=>send(q.prompt)}><Sparkles size={11} style={{display:'inline',marginRight:4}}/>{q.label}</button>)}</div><div className="ai-chat"><AnimatePresence initial={false}>{messages.map((m,i)=><motion.div key={i} className={`ai-msg ${m.sender}`} variants={messageVariants} initial="initial" animate="animate" style={{willChange:'transform,opacity'}}>{m.sender==='user'?m.text:<SafeMarkdown content={m.text}/>}</motion.div>)}{loading&&<motion.div className="ai-msg bot" variants={messageVariants} initial="initial" animate="animate" style={{display:'flex',alignItems:'center',gap:8}}><Sparkles size={15}/><span>Thinking...</span></motion.div>}</AnimatePresence><div ref={chatBottomRef}/></div><form className="ai-composer" onSubmit={e=>{e.preventDefault();send()}}><input value={input} onChange={e=>setInput(e.target.value)} placeholder="Ask AI Advisor about your spending, budget, or savings..." disabled={loading}/><button type="submit" className="button primary" disabled={loading||!input.trim()}><Send size={16}/></button></form></div></Modal>
+function AiModal({ data, close }: { data: FinanceData; close: () => void }) {
+  const ctx = useMemo(() => buildFinancialContext(data.transactions, data.budgets, data.settings), [data]);
+  const [messages, setMessages] = useState<{ sender: 'user' | 'bot'; text: string; isOffline?: boolean }[]>(() => [{ sender: 'bot', text: generateLocalAiResponse('overview', ctx) }]);
+  const [input, setInput] = useState(''); const [loading, setLoading] = useState(false); const chatBottomRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, loading]);
+  const send = async (queryText?: string) => {
+    const textToSend = (queryText || input).trim(); if (!textToSend || loading) return;
+    setInput('');
+    const newMessages = [...messages, { sender: 'user' as const, text: textToSend }];
+    setMessages(newMessages);
+    setLoading(true);
+    try {
+      const historyTurns: ConversationTurn[] = newMessages.map(m => ({
+        role: m.sender === 'user' ? 'user' : 'model',
+        text: m.text
+      }));
+      const result = await queryAiAdvisor(textToSend, historyTurns, ctx);
+      setMessages(prev => [...prev, { sender: 'bot', text: result.text, isOffline: result.isOffline }]);
+    } catch {
+      const fallback = generateLocalAiResponse(textToSend, ctx) || 'Unable to get advice right now. Please try again.';
+      setMessages(prev => [...prev, { sender: 'bot', text: fallback, isOffline: true }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+  const quickActions = [
+    { label: '50/30/20 Budget', prompt: 'Generate 50/30/20 Budget' },
+    { label: 'Spending Analysis', prompt: 'Analyze Spending Trends' },
+    { label: 'Savings Goal', prompt: 'Simulate Savings Goal' },
+    { label: 'Debt Strategy', prompt: 'Debt Payoff Strategy' }
+  ];
+  return <Modal close={close} title="AI Advisor"><div className="ai-modal"><div className="ai-chips">{quickActions.map(q => <button key={q.label} type="button" className="ai-chip" onClick={() => send(q.prompt)}><Sparkles size={11} style={{ display: 'inline', marginRight: 4 }} />{q.label}</button>)}</div><div className="ai-chat"><AnimatePresence initial={false}>{messages.map((m, i) => <motion.div key={i} className={`ai-msg ${m.sender}`} variants={messageVariants} initial="initial" animate="animate" style={{ willChange: 'transform,opacity' }}>{m.sender === 'user' ? m.text : <SafeMarkdown content={m.text} />}</motion.div>)}{loading && <motion.div className="ai-msg bot" variants={messageVariants} initial="initial" animate="animate" style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Sparkles size={15} /><span>Thinking...</span></motion.div>}</AnimatePresence><div ref={chatBottomRef} /></div><form className="ai-composer" onSubmit={e => { e.preventDefault(); send() }}><input value={input} onChange={e => setInput(e.target.value)} placeholder="Ask AI Advisor about your spending, budget, or savings..." disabled={loading} /><button type="submit" className="button primary" disabled={loading || !input.trim()}><Send size={16} /></button></form></div></Modal>
 }
 
 function PrivacyModal({ close }: { close: () => void }) {
@@ -3457,7 +3479,7 @@ function AccountsModal({
           const I = accountIcons[acc] || WalletCards;
           return (
             <span key={acc} className={`config-pill ${isDef ? 'is-default' : ''}`}>
-              <I size={14} style={{color: isDef ? 'var(--accent)' : 'var(--muted)'}}/>
+              <I size={14} style={{ color: isDef ? 'var(--accent)' : 'var(--muted)' }} />
               <span>{acc}</span>
               {isDef ? (
                 <span className="config-default-badge">Default</span>
@@ -3468,19 +3490,19 @@ function AccountsModal({
               )}
               {accs.length > 1 && !isDef && (
                 <button type="button" className="config-pill-del" onClick={() => removeAccount(acc)} aria-label={`Remove ${acc}`} title={`Remove ${acc}`}>
-                  <X size={12}/>
+                  <X size={12} />
                 </button>
               )}
             </span>
           );
         })}
       </div>
-      <form className="config-inline-form modal-inline-form" onSubmit={e => { e.preventDefault(); addAccount(); }} style={{padding:'12px 0'}}>
-        <input value={newAcc} onChange={e => setNewAcc(e.target.value)} placeholder="Add new account (e.g. Indian Bank, HDFC, Paytm)..."/>
-        <button type="submit" className="button compact primary" disabled={!newAcc.trim()}><Plus size={15}/> Add</button>
+      <form className="config-inline-form modal-inline-form" onSubmit={e => { e.preventDefault(); addAccount(); }} style={{ padding: '12px 0' }}>
+        <input value={newAcc} onChange={e => setNewAcc(e.target.value)} placeholder="Add new account (e.g. Indian Bank, HDFC, Paytm)..." />
+        <button type="submit" className="button compact primary" disabled={!newAcc.trim()}><Plus size={15} /> Add</button>
       </form>
-      <div className="modal-actions" style={{justifyContent:'space-between',alignItems:'center',marginTop:16}}>
-        <button type="button" className="text-button" onClick={resetAccounts}><RotateCcw size={13}/> Reset to defaults</button>
+      <div className="modal-actions" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 16 }}>
+        <button type="button" className="text-button" onClick={resetAccounts}><RotateCcw size={13} /> Reset to defaults</button>
         <button type="button" className="button primary compact" onClick={close}>Done</button>
       </div>
     </Modal>
