@@ -240,9 +240,11 @@ export function AuthScreen({
   }
 
   const themes: { id: ThemeId; label: string; short: string }[] = [
+    { id: 'liquid', label: 'Midnight Liquid', short: 'Liquid' },
+    { id: 'navy', label: 'Deep Navy / Gold', short: 'Navy' },
     { id: 'midnight', label: 'Midnight Glass', short: 'Midnight' },
     { id: 'cream', label: 'Cream Clay', short: 'Cream' },
-    { id: 'amoled', label: 'AMOLED', short: 'AMOLED' }
+    { id: 'cyan', label: 'Graphite Cyan', short: 'Cyan' }
   ]
 
   if (isVerifiedSuccess) {
