@@ -25,11 +25,10 @@ export function initMobileFeatures(onBackPress?: () => boolean): () => void {
     return () => {}
   }
 
-  // Configure Status Bar for THOGAI's signature luxury dark emerald aesthetic
+  // Configure Status Bar for full-screen immersive experience
   try {
-    StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {})
-    StatusBar.setBackgroundColor({ color: '#10231e' }).catch(() => {})
-    StatusBar.setStyle({ style: Style.Dark }).catch(() => {})
+    StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {})
+    StatusBar.hide().catch(() => {})
   } catch (err) {
     console.debug('StatusBar configuration not available:', err)
   }

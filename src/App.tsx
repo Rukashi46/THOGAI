@@ -389,9 +389,16 @@ function App() {
         setCurrentUser(user)
         cloudSync.setUser(user)
         setShowAuth(false)
-        const cached = await idbStorage.loadUserData(user.id) || storage.read()
-        setData(cached)
-        let fresh = await cloudSync.pull(user, cached)
+        const cached = await idbStorage.loadUserData(user.id)
+        if (cached) {
+          setData(cached)
+        }
+        const baseData: FinanceData = cached || {
+          transactions: [],
+          budgets: [],
+          settings: { ...defaultSettings, name: user.name || '' }
+        }
+        let fresh = await cloudSync.pull(user, baseData)
         // Restore nickname from cloud user profile if local name is blank
         if (!fresh.settings.name && user.name) {
           fresh = { ...fresh, settings: { ...fresh.settings, name: user.name } }
@@ -429,7 +436,12 @@ function App() {
           cloudSync.setUser(user)
           const cached = await idbStorage.loadUserData(user.id)
           if (cached) setData(cached)
-          let fresh = await cloudSync.pull(user, cached || storage.read())
+          const baseData: FinanceData = cached || {
+            transactions: [],
+            budgets: [],
+            settings: { ...defaultSettings, name: user.name || '' }
+          }
+          let fresh = await cloudSync.pull(user, baseData)
           // Restore nickname from cloud user profile if local name is blank
           if (!fresh.settings.name && user.name) {
             fresh = { ...fresh, settings: { ...fresh.settings, name: user.name } }
@@ -705,11 +717,30 @@ function App() {
       <AuthScreen
         currentTheme={data.settings.theme}
         onThemeChange={(t) => setSettings({ theme: t })}
-        onSuccess={(user) => {
+        onSuccess={async (user) => {
           setCurrentUser(user)
           cloudSync.setUser(user)
-          setShowAuth(false)
-          setToast(`Welcome back, ${user.name || 'User'}!`)
+          setIsRestoringSession(true)
+          try {
+            const cached = await idbStorage.loadUserData(user.id)
+            const baseData: FinanceData = cached || {
+              transactions: [],
+              budgets: [],
+              settings: { ...defaultSettings, name: user.name || '' }
+            }
+            let fresh = await cloudSync.pull(user, baseData)
+            if (!fresh.settings.name && user.name) {
+              fresh = { ...fresh, settings: { ...fresh.settings, name: user.name } }
+            }
+            setData(fresh)
+            setShowAuth(false)
+            setToast(`Welcome back, ${user.name || 'User'}! Synced from cloud`)
+          } catch {
+            setShowAuth(false)
+            setToast(`Welcome back, ${user.name || 'User'}!`)
+          } finally {
+            setIsRestoringSession(false)
+          }
         }}
         onContinueOffline={() => {
           setShowAuth(false)

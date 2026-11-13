@@ -226,6 +226,7 @@ class CloudSyncService {
         const resolvedTheme = pinnedDefault ?? cloudSettings.theme ?? mergedSettings.theme
         mergedSettings = {
           ...mergedSettings,
+          name: user.name || cloudSettings.nickname || mergedSettings.name,
           currency: cloudSettings.currency || mergedSettings.currency,
           monthlyBudget: Number(cloudSettings.monthly_budget ?? mergedSettings.monthlyBudget),
           startingBalance: Number(cloudSettings.starting_balance ?? mergedSettings.startingBalance),
@@ -233,11 +234,11 @@ class CloudSyncService {
           defaultAccount: cloudSettings.default_account || mergedSettings.defaultAccount,
           theme: resolvedTheme,
           defaultTheme: pinnedDefault,
-          categories: Array.isArray(cloudSettings.categories) ? cloudSettings.categories : mergedSettings.categories,
-          incomeCategories: Array.isArray(cloudSettings.income_categories) ? cloudSettings.income_categories : mergedSettings.incomeCategories,
-          accounts: Array.isArray(cloudSettings.accounts) ? cloudSettings.accounts : mergedSettings.accounts,
+          categories: Array.isArray(cloudSettings.categories) && cloudSettings.categories.length > 0 ? cloudSettings.categories : mergedSettings.categories,
+          incomeCategories: Array.isArray(cloudSettings.income_categories) && cloudSettings.income_categories.length > 0 ? cloudSettings.income_categories : mergedSettings.incomeCategories,
+          accounts: Array.isArray(cloudSettings.accounts) && cloudSettings.accounts.length > 0 ? cloudSettings.accounts : mergedSettings.accounts,
           notifications: cloudSettings.notifications || mergedSettings.notifications,
-          onboardingCompleted: cloudSettings.onboarding_completed ?? mergedSettings.onboardingCompleted,
+          onboardingCompleted: cloudSettings.onboarding_completed ?? true,
           nickname: cloudSettings.nickname || mergedSettings.nickname,
         }
       }
@@ -248,8 +249,9 @@ class CloudSyncService {
         settings: mergedSettings
       }
 
-      // Persist merged data to user's scoped IndexedDB
+      // Persist merged data to user's scoped IndexedDB and active storage
       await idbStorage.saveUserData(user.id, mergedData)
+      storage.write(mergedData)
       this.setSyncState('synced')
 
       // Drain any queued offline mutations
