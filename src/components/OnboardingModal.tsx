@@ -8,7 +8,7 @@ import {
 import { currencies, formatMoney } from '../lib/finance'
 import {
   defaultAccounts, defaultExpenseCategories, defaultIncomeCategories,
-  type Settings, type ThemeId, type Transaction
+  setDefaultTheme, type Settings, type ThemeId, type Transaction
 } from '../services/storage'
 
 const ONBOARDING_THEMES: { id: ThemeId; name: string; copy: string; bg: string; barColor: string }[] = [
@@ -16,7 +16,7 @@ const ONBOARDING_THEMES: { id: ThemeId; name: string; copy: string; bg: string; 
   { id: 'navy',     name: 'Deep Navy / Gold', copy: 'Dark navy & gold',   bg: '#0d1526', barColor: '#c9a227' },
   { id: 'midnight', name: 'Midnight Glass',   copy: 'Classic dark glass', bg: '#10231e', barColor: '#afdf6d' },
   { id: 'cream',    name: 'Cream Clay',       copy: 'Warm & minimal',     bg: '#f4ecdc', barColor: '#ad6d40' },
-  { id: 'amoled',   name: 'AMOLED Stealth',   copy: 'Pure black',         bg: '#000000', barColor: '#d1ec5c' },
+  { id: 'cyan',     name: 'Graphite Cyan',    copy: 'Techy & futuristic', bg: '#0d1a1f', barColor: '#00d4e8' },
 ]
 import {
   backdropVariants, desktopModalVariants, mobileSheetVariants,
@@ -136,8 +136,12 @@ export function OnboardingModal({
     // Sum opening balances to set startingBalance in settings without creating earned income
     const sumOpening = accounts.reduce((acc, a) => acc + (Number(a.openingBalance) || 0), 0)
 
+    // Persist the chosen theme as the pinned default so cloud sync never overwrites it
+    setDefaultTheme(selectedTheme)
+
     const patch: Partial<Settings> = {
       theme: selectedTheme,
+      defaultTheme: selectedTheme,
       currency: selectedCurrency,
       categories: expenseCats,
       incomeCategories: incomeCats,

@@ -15,7 +15,8 @@ import {
 import { categorySpend, currencies, formatMoney, groupByDate, labelDate, monthKey, newId, seedBudgets, snapshot, budgetState } from './lib/finance'
 import {
   defaultAccounts, defaultCategories, defaultExpenseCategories, defaultIncomeCategories,
-  defaultSettings, storage, type Budget, type FinanceData, type ReconciliationRecord,
+  defaultSettings, storage, getDefaultTheme, setDefaultTheme,
+  type Budget, type FinanceData, type ReconciliationRecord,
   type ReconciliationSession, type ReconciliationMatch, type ReconciliationMatchType,
   type Settings, type StatementTransaction, type ThemeId,
   type Transaction, type TransactionType
@@ -263,9 +264,9 @@ const navOrder: Page[] = ['home', 'ledger', 'budget', 'stats', 'config']
 const themes: {id:ThemeId;name:string;copy:string}[] = [
   {id:'liquid',name:'Midnight Liquid',copy:'Deep violet glass'},
   {id:'navy',name:'Deep Navy / Gold',copy:'Dark navy & warm gold'},
-  {id:'midnight',name:'Midnight Glass',copy:'Liquid glass'},
+  {id:'midnight',name:'Midnight Glass',copy:'Classic dark glass'},
   {id:'cream',name:'Cream Clay',copy:'Softly molded'},
-  {id:'amoled',name:'AMOLED Stealth',copy:'Pure black'},
+  {id:'cyan',name:'Graphite Cyan',copy:'Techy & futuristic'},
 ]
 const today = () => new Date().toISOString().slice(0,10)
 const safe = (n:number) => Number.isFinite(n) ? n : 0
@@ -351,7 +352,7 @@ function App() {
     const metaThemeColor = document.querySelector('meta[name="theme-color"]');
     if (metaThemeColor) {
       const metaColors: Partial<Record<ThemeId,string>> = {
-        cream: '#f4ecdc', amoled: '#000000', liquid: '#0b0b14', navy: '#0d1526', midnight: '#10231e'
+        cream: '#f4ecdc', cyan: '#0d1a1f', liquid: '#0b0b14', navy: '#0d1526', midnight: '#10231e'
       }
       metaThemeColor.setAttribute('content', metaColors[data.settings.theme] ?? '#10231e');
     }
@@ -2103,6 +2104,25 @@ function ConfigPage({
                 {data.settings.theme===t.id&&<b><Check size={13}/></b>}
               </button>
             ))}
+          </div>
+          {/* Default theme row */}
+          <div className="default-theme-row">
+            <span className="default-theme-label">
+              <strong>Keep this theme on every login</strong>
+              <small>{data.settings.defaultTheme ? `Pinned: ${themes.find(t=>t.id===data.settings.defaultTheme)?.name ?? data.settings.defaultTheme}` : 'Theme may change when syncing from cloud'}</small>
+            </span>
+            <button
+              className={`button compact ${data.settings.defaultTheme ? 'primary' : 'secondary'}`}
+              onClick={()=>{
+                const pinned = data.settings.defaultTheme
+                const newPin = pinned ? null : data.settings.theme
+                setDefaultTheme(newPin)
+                setSettings({ defaultTheme: newPin })
+                toast(newPin ? `${themes.find(t=>t.id===newPin)?.name} set as default theme` : 'Default theme cleared')
+              }}
+            >
+              {data.settings.defaultTheme ? <><Check size={13}/> Pinned</> : 'Pin as default'}
+            </button>
           </div>
         </div>
 

@@ -1,6 +1,6 @@
 export type TransactionType = 'income' | 'expense' | 'due'
 export type Period = 'monthly'
-export type ThemeId = 'midnight' | 'cream' | 'amoled' | 'liquid' | 'navy'
+export type ThemeId = 'midnight' | 'cream' | 'cyan' | 'liquid' | 'navy'
 export interface SplitShare {
   id: string
   person: string
@@ -94,6 +94,8 @@ export interface Settings {
   name: string
   currency: string
   theme: ThemeId
+  /** The user's chosen default theme — stored device-locally, never overwritten by cloud sync */
+  defaultTheme: ThemeId | null
   monthlyBudget: number
   startingBalance: number
   defaultCategory: string
@@ -108,6 +110,22 @@ export interface Settings {
   defaultAccount: string
   onboardingCompleted: boolean
   nickname: string
+}
+
+/** Read the pinned default theme from a separate localStorage key (device-only, never synced) */
+export const DEFAULT_THEME_KEY = 'thogai.defaultTheme'
+export function getDefaultTheme(): ThemeId | null {
+  try {
+    const v = localStorage.getItem(DEFAULT_THEME_KEY)
+    const valid: ThemeId[] = ['midnight', 'cream', 'cyan', 'liquid', 'navy']
+    return v && valid.includes(v as ThemeId) ? (v as ThemeId) : null
+  } catch { return null }
+}
+export function setDefaultTheme(id: ThemeId | null): void {
+  try {
+    if (id) localStorage.setItem(DEFAULT_THEME_KEY, id)
+    else localStorage.removeItem(DEFAULT_THEME_KEY)
+  } catch {}
 }
 export interface FinanceData { transactions: Transaction[]; budgets: Budget[]; settings: Settings }
 
@@ -169,6 +187,7 @@ export const defaultSettings: Settings = {
   name: '',
   currency: 'INR',
   theme: 'midnight',
+  defaultTheme: null,
   monthlyBudget: 0,
   startingBalance: 0,
   defaultCategory: 'Food & Dining',
@@ -186,7 +205,7 @@ export const defaultSettings: Settings = {
 }
 const KEY = 'thogai.finance.v1'
 const fallback: FinanceData = { transactions: [], budgets: [], settings: defaultSettings }
-const validThemes: ThemeId[] = ['midnight', 'cream', 'amoled', 'liquid', 'navy']
+const validThemes: ThemeId[] = ['midnight', 'cream', 'cyan', 'liquid', 'navy']
 export const sanitizeTheme = (theme?: unknown): ThemeId => (typeof theme === 'string' && (validThemes as string[]).includes(theme)) ? (theme as ThemeId) : 'midnight'
 
 export function safeMergeItems(existing: unknown, defaults: string[]): string[] {

@@ -1,6 +1,6 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { idbStorage, type QueuedSync } from './idb'
-import { storage, type Budget, type FinanceData, type ReconciliationRecord, type Settings, type Transaction } from './storage'
+import { storage, getDefaultTheme, type Budget, type FinanceData, type ReconciliationRecord, type Settings, type Transaction } from './storage'
 import type { AuthUser } from './auth'
 
 export type SyncState = 'idle' | 'syncing' | 'synced' | 'offline' | 'error'
@@ -221,6 +221,9 @@ class CloudSyncService {
       // Merge Settings
       let mergedSettings = { ...localData.settings }
       if (cloudSettings) {
+        // Determine active theme: pinned default theme (device-only) always wins over cloud value
+        const pinnedDefault = getDefaultTheme()
+        const resolvedTheme = pinnedDefault ?? cloudSettings.theme ?? mergedSettings.theme
         mergedSettings = {
           ...mergedSettings,
           currency: cloudSettings.currency || mergedSettings.currency,
@@ -228,7 +231,8 @@ class CloudSyncService {
           startingBalance: Number(cloudSettings.starting_balance ?? mergedSettings.startingBalance),
           defaultCategory: cloudSettings.default_category || mergedSettings.defaultCategory,
           defaultAccount: cloudSettings.default_account || mergedSettings.defaultAccount,
-          theme: cloudSettings.theme || mergedSettings.theme,
+          theme: resolvedTheme,
+          defaultTheme: pinnedDefault,
           categories: Array.isArray(cloudSettings.categories) ? cloudSettings.categories : mergedSettings.categories,
           incomeCategories: Array.isArray(cloudSettings.income_categories) ? cloudSettings.income_categories : mergedSettings.incomeCategories,
           accounts: Array.isArray(cloudSettings.accounts) ? cloudSettings.accounts : mergedSettings.accounts,
