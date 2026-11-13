@@ -263,19 +263,11 @@ function ConfirmModal({
 }
 const navOrder: Page[] = ['home', 'ledger', 'budget', 'stats', 'config']
 const themes: {id:ThemeId;name:string;copy:string}[] = [
-<<<<<<< HEAD
   {id:'navy',name:'Deep Navy & Gold',copy:'Dark navy & warm gold'},
   {id:'liquid',name:'Midnight Liquid',copy:'Deep violet glass'},
   {id:'midnight',name:'Green Midnight',copy:'Emerald green glass'},
   {id:'cream',name:'Cream Clay',copy:'Warm sculptural clay'},
   {id:'cyan',name:'Graphite Cyan',copy:'Techy cyan glass'},
-=======
-  {id:'liquid',name:'Midnight Liquid',copy:'Deep violet glass'},
-  {id:'navy',name:'Deep Navy / Gold',copy:'Dark navy & warm gold'},
-  {id:'midnight',name:'Midnight Glass',copy:'Classic dark glass'},
-  {id:'cream',name:'Cream Clay',copy:'Softly molded'},
-  {id:'cyan',name:'Graphite Cyan',copy:'Techy & futuristic'},
->>>>>>> 2f8aaaa7558612f93e73df0b3bb8b57df5d7b51e
 ]
 const today = () => new Date().toISOString().slice(0,10)
 const safe = (n:number) => Number.isFinite(n) ? n : 0

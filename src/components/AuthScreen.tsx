@@ -241,15 +241,9 @@ export function AuthScreen({
   }
 
   const themes: { id: ThemeId; label: string; short: string }[] = [
-<<<<<<< HEAD
     { id: 'navy', label: 'Deep Navy & Gold', short: 'Navy' },
     { id: 'liquid', label: 'Midnight Liquid', short: 'Liquid' },
     { id: 'midnight', label: 'Green Midnight', short: 'Green' },
-=======
-    { id: 'liquid', label: 'Midnight Liquid', short: 'Liquid' },
-    { id: 'navy', label: 'Deep Navy / Gold', short: 'Navy' },
-    { id: 'midnight', label: 'Midnight Glass', short: 'Midnight' },
->>>>>>> 2f8aaaa7558612f93e73df0b3bb8b57df5d7b51e
     { id: 'cream', label: 'Cream Clay', short: 'Cream' },
     { id: 'cyan', label: 'Graphite Cyan', short: 'Cyan' }
   ]

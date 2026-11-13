@@ -1033,7 +1033,6 @@ input:-webkit-autofill:active{
 [data-theme="cream"] .split-person-row input[type=text]{background:#fbf6ed;border-color:rgba(118,87,55,.18)}
 [data-theme="cyan"] .split-builder-section{background:#0d1f28;border-color:#143040}
 [data-theme="cyan"] .split-person-row input[type=text]{background:#0d1f28;border-color:#143040}
-<<<<<<< HEAD
 
 /* ── Theme-Adaptive Logo & Lock Recovery ─────────────────────────────── */
 .brand-mark {
@@ -1121,6 +1120,3 @@ input:-webkit-autofill:active{
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
-
-=======
->>>>>>> 2f8aaaa7558612f93e73df0b3bb8b57df5d7b51e
