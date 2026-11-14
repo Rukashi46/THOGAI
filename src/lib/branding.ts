@@ -9,8 +9,8 @@ export const THEME_LOGOS: Record<ThemeId, string> = {
 }
 
 export const THEME_META: Record<ThemeId, { name: string; copy: string }> = {
-  navy: { name: 'Deep Navy & Gold', copy: 'Dark navy & radiant gold' },
-  liquid: { name: 'Midnight Liquid', copy: 'Pure light violet minimalist' },
+  navy: { name: 'Obsidian Lavender', copy: 'Deep obsidian & glowing silver-violet' },
+  liquid: { name: 'Lilac Pure', copy: 'Clean light lilac minimalist' },
   cream: { name: 'Cream Clay', copy: 'Warm sculptural clay & amber' },
   midnight: { name: 'Green Midnight', copy: 'Lush dark emerald glow' },
   cyan: { name: 'Graphite Cyan', copy: 'Dark graphite & vibrant cyan' },

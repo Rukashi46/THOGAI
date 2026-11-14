@@ -263,8 +263,8 @@ function ConfirmModal({
 }
 const navOrder: Page[] = ['home', 'ledger', 'budget', 'stats', 'config']
 const themes: { id: ThemeId; name: string; copy: string }[] = [
-  { id: 'navy', name: 'Deep Navy & Gold', copy: 'Dark navy & radiant gold (Dark)' },
-  { id: 'liquid', name: 'Midnight Liquid', copy: 'Pure light violet minimalist (Light)' },
+  { id: 'navy', name: 'Obsidian Lavender', copy: 'Deep obsidian & glowing silver-violet (Dark)' },
+  { id: 'liquid', name: 'Lilac Pure', copy: 'Clean light lilac minimalist (Light)' },
   { id: 'cream', name: 'Cream Clay', copy: 'Warm sculptural clay & amber (Light)' },
   { id: 'midnight', name: 'Green Midnight', copy: 'Lush dark emerald glow (Dark)' },
   { id: 'cyan', name: 'Graphite Cyan', copy: 'Dark graphite & vibrant cyan (Dark)' },
@@ -363,13 +363,13 @@ function App() {
     const metaThemeColor = document.querySelector('meta[name="theme-color"]');
     if (metaThemeColor) {
       const metaColors: Partial<Record<ThemeId, string>> = {
-        navy: '#021238',
+        navy: '#0c0c13',
         liquid: '#faf8fd',
         cream: '#fdf2e0',
-        midnight: '#013e2c',
+        midnight: '#01241a',
         cyan: '#12141d'
       }
-      metaThemeColor.setAttribute('content', metaColors[data.settings.theme] ?? '#021238');
+      metaThemeColor.setAttribute('content', metaColors[data.settings.theme] ?? '#0c0c13');
     }
   }, [data.settings.theme])
 

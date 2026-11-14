@@ -34,14 +34,14 @@
 [data-theme="liquid"] input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(0.3) sepia(1) saturate(5) hue-rotate(240deg) brightness(0.9)}
 [data-theme="liquid"] .themed-select-dropdown,[data-theme="liquid"] .themed-calendar-popup{background:rgba(255,255,255,.98);backdrop-filter:blur(22px);border-color:rgba(66,23,139,.18);box-shadow:0 20px 50px rgba(46,14,105,.12)}
 [data-theme="liquid"] .themed-select-trigger,[data-theme="liquid"] .themed-datepicker-trigger{background:#ffffff;backdrop-filter:blur(12px);border-color:rgba(66,23,139,.18)}
-[data-theme="navy"]{--bg:#021238;--bg-2:#051b4d;--surface:rgba(7,28,78,.72);--surface-strong:rgba(10,38,102,.92);--surface-soft:rgba(233,169,61,.08);--text:#f8f4ea;--text-2:#d4cbb3;--muted:#918974;--accent:#e9a93d;--accent-strong:#c78a22;--accent-contrast:#021238;--positive:#6be094;--negative:#ff6e6e;--warning:#e9a93d;--border:rgba(233,169,61,.2);--shadow:0 24px 70px rgba(0,6,24,.6);--chart-0:#e9a93d;--chart-1:#46a7e0;--chart-2:#f5c76a;--chart-3:#ff6e6e;--chart-4:#9e8bd7;--select-arrow:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23e9a93d' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");color-scheme:dark;--brand-bg:linear-gradient(135deg,#051b4d,#092a70);--brand-bar:linear-gradient(to top,#e9a93d,#fce08b);--brand-leaf:#e9a93d}
-[data-theme="navy"] body{background:radial-gradient(ellipse at 65% 0%,rgba(233,169,61,.16),transparent 50%),radial-gradient(ellipse at 5% 85%,rgba(70,167,224,.12),transparent 45%),var(--bg)}
-[data-theme="navy"] select option,[data-theme="navy"] option{background-color:#051845;color:#f8f4ea}
-[data-theme="navy"] .filters select,[data-theme="navy"] .setting-row select,[data-theme="navy"] .month-select{background-color:#051845;border-color:rgba(233,169,61,.24)}
-[data-theme="navy"] .modal select,[data-theme="navy"] .modal input{background-color:#051b4d;border-color:rgba(233,169,61,.22)}
-[data-theme="navy"] input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(0.85) sepia(1) saturate(4) hue-rotate(10deg) brightness(1.2)}
-[data-theme="navy"] .themed-select-dropdown,[data-theme="navy"] .themed-calendar-popup{background:rgba(4,20,58,.96);backdrop-filter:blur(22px);border-color:rgba(233,169,61,.24);box-shadow:0 20px 50px rgba(0,6,24,.65)}
-[data-theme="navy"] .themed-select-trigger,[data-theme="navy"] .themed-datepicker-trigger{background:rgba(7,28,78,.7);backdrop-filter:blur(12px);border-color:rgba(233,169,61,.2)}
+[data-theme="navy"]{--bg:#0c0c13;--bg-2:#161622;--surface:rgba(22,22,34,.74);--surface-strong:rgba(28,28,44,.92);--surface-soft:rgba(216,214,252,.08);--text:#f5f4fd;--text-2:#c7c5df;--muted:#8583a6;--accent:#d8d6fc;--accent-strong:#bcbaee;--accent-contrast:#0c0c13;--positive:#70e4a6;--negative:#ff7088;--warning:#f5c76a;--border:rgba(216,214,252,.18);--shadow:0 24px 70px rgba(0,0,0,.65);--chart-0:#d8d6fc;--chart-1:#a4a1e8;--chart-2:#f5c76a;--chart-3:#ff7088;--chart-4:#70e4a6;--select-arrow:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23d8d6fc' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");color-scheme:dark;--brand-bg:linear-gradient(135deg,#161622,#222234);--brand-bar:linear-gradient(to top,#b0aed8,#ecebfe);--brand-leaf:#d8d6fc}
+[data-theme="navy"] body{background:radial-gradient(ellipse at 65% 0%,rgba(216,214,252,.14),transparent 50%),radial-gradient(ellipse at 5% 85%,rgba(164,161,232,.1),transparent 45%),var(--bg)}
+[data-theme="navy"] select option,[data-theme="navy"] option{background-color:#161622;color:#f5f4fd}
+[data-theme="navy"] .filters select,[data-theme="navy"] .setting-row select,[data-theme="navy"] .month-select{background-color:#161622;border-color:rgba(216,214,252,.22)}
+[data-theme="navy"] .modal select,[data-theme="navy"] .modal input{background-color:#161622;border-color:rgba(216,214,252,.2)}
+[data-theme="navy"] input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(0.85) sepia(1) saturate(2) hue-rotate(200deg) brightness(1.2)}
+[data-theme="navy"] .themed-select-dropdown,[data-theme="navy"] .themed-calendar-popup{background:rgba(18,18,28,.96);backdrop-filter:blur(22px);border-color:rgba(216,214,252,.22);box-shadow:0 20px 50px rgba(0,0,0,.7)}
+[data-theme="navy"] .themed-select-trigger,[data-theme="navy"] .themed-datepicker-trigger{background:rgba(22,22,34,.7);backdrop-filter:blur(12px);border-color:rgba(216,214,252,.18)}
 *{box-sizing:border-box}html{background:var(--bg)}body{margin:0;background:radial-gradient(circle at 75% -10%,color-mix(in srgb,var(--accent) 18%,transparent),transparent 32rem),var(--bg);color:var(--text);font-family:var(--font);font-size:15px;line-height:1.35}button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer;border:0}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 55%,transparent);outline-offset:3px}/* button:active transform removed — Framer Motion whileTap is authoritative */
 select{appearance:none;-webkit-appearance:none;-moz-appearance:none;background-image:var(--select-arrow);background-repeat:no-repeat;background-position:calc(100% - 12px) center;background-size:16px 16px;padding-right:36px;cursor:pointer;transition:border-color .18s ease,box-shadow .18s ease}
 select::-ms-expand{display:none}
@@ -110,8 +110,8 @@ input[type="date"]::-webkit-datetime-edit-month-field:focus,input[type="date"]::
 /* ── Theme preview swatches ─────────────────────────────────────────── */
 .theme-card.liquid .theme-preview{background:#faf8fd;border:1px solid rgba(66,23,139,.18)}
 .theme-card.liquid .theme-preview i{background:linear-gradient(to top,#42178b,#7d45d6)}
-.theme-card.navy .theme-preview{background:#021238;border:1px solid rgba(233,169,61,.22)}
-.theme-card.navy .theme-preview i{background:linear-gradient(to top,#e9a93d,#fce08b)}
+.theme-card.navy .theme-preview{background:#0c0c13;border:1px solid rgba(216,214,252,.22)}
+.theme-card.navy .theme-preview i{background:linear-gradient(to top,#b0aed8,#ecebfe)}
 .theme-card.midnight .theme-preview{background:#01241a;border:1px solid rgba(100,243,190,.22)}
 .theme-card.midnight .theme-preview i{background:linear-gradient(to top,#64f3be,#42dfa5)}
 .theme-card.cream .theme-preview{background:#fbf4e8;border:1px solid rgba(121,58,27,.18)}

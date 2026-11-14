@@ -14,7 +14,7 @@ function Resize-Image {
     $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
 
     if ($isSplash) {
-        $bgColor = [System.Drawing.ColorTranslator]::FromHtml("#080e1a")
+        $bgColor = [System.Drawing.ColorTranslator]::FromHtml("#0c0c13")
         $g.Clear($bgColor)
         # Scale logo to ~40% of the smaller dimension
         $minDim = [Math]::Min($width, $height)
