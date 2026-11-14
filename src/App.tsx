@@ -1103,6 +1103,11 @@ function App() {
                 }
               }
               save(nextData)
+              // Sync settings to cloud immediately so startingBalance, currency etc.
+              // are available when the user logs in on another device
+              if (currentUser) {
+                cloudSync.syncSettings(nextData.settings, currentUser).catch(() => {})
+              }
               if (patch.name && currentUser) {
                 authService.updateProfile(patch.name).catch(() => { })
               }

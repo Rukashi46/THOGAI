@@ -549,6 +549,8 @@ class CloudSyncService {
   public async migrateGuestData(user: AuthUser): Promise<number> {
     const guestData = storage.read()
     if (!guestData.transactions.length && !guestData.budgets.length) {
+      // Even with no transactions/budgets, still upload settings so startingBalance etc. syncs
+      await this.syncSettings(guestData.settings, user)
       await idbStorage.markDataMigrated(user.id)
       return 0
     }
@@ -589,6 +591,9 @@ class CloudSyncService {
       if (budgetRows.length > 0) {
         await supabase.from('budgets').upsert(budgetRows)
       }
+
+      // 3. Upload settings (startingBalance, currency, accounts, etc.)
+      await this.syncSettings(guestData.settings, user)
 
       await idbStorage.markDataMigrated(user.id)
       this.setSyncState('synced')
