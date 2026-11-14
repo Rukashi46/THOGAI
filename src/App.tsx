@@ -263,11 +263,11 @@ function ConfirmModal({
 }
 const navOrder: Page[] = ['home', 'ledger', 'budget', 'stats', 'config']
 const themes: { id: ThemeId; name: string; copy: string }[] = [
-  { id: 'navy', name: 'Deep Navy & Gold', copy: 'Dark navy & warm gold' },
-  { id: 'liquid', name: 'Midnight Liquid', copy: 'Deep violet glass' },
-  { id: 'midnight', name: 'Green Midnight', copy: 'Emerald green glass' },
-  { id: 'cream', name: 'Cream Clay', copy: 'Warm sculptural clay' },
-  { id: 'cyan', name: 'Graphite Cyan', copy: 'Techy cyan glass' },
+  { id: 'navy', name: 'Deep Navy & Gold', copy: 'Dark navy & radiant gold (Dark)' },
+  { id: 'liquid', name: 'Midnight Liquid', copy: 'Pure light violet minimalist (Light)' },
+  { id: 'cream', name: 'Cream Clay', copy: 'Warm sculptural clay & amber (Light)' },
+  { id: 'midnight', name: 'Green Midnight', copy: 'Lush dark emerald glow (Dark)' },
+  { id: 'cyan', name: 'Graphite Cyan', copy: 'Dark graphite & vibrant cyan (Dark)' },
 ]
 const today = () => new Date().toISOString().slice(0, 10)
 const safe = (n: number) => Number.isFinite(n) ? n : 0
@@ -358,14 +358,18 @@ function App() {
   // Theme synchronization (runs immediately before any render)
   useEffect(() => {
     document.documentElement.dataset.theme = data.settings.theme;
-    const lightThemes: ThemeId[] = ['cream']
+    const lightThemes: ThemeId[] = ['liquid', 'cream']
     document.documentElement.style.colorScheme = lightThemes.includes(data.settings.theme) ? 'light' : 'dark';
     const metaThemeColor = document.querySelector('meta[name="theme-color"]');
     if (metaThemeColor) {
       const metaColors: Partial<Record<ThemeId, string>> = {
-        cream: '#f4ecdc', cyan: '#0d1a1f', liquid: '#0b0b14', navy: '#0d1526', midnight: '#10231e'
+        navy: '#021238',
+        liquid: '#faf8fd',
+        cream: '#fdf2e0',
+        midnight: '#013e2c',
+        cyan: '#12141d'
       }
-      metaThemeColor.setAttribute('content', metaColors[data.settings.theme] ?? '#10231e');
+      metaThemeColor.setAttribute('content', metaColors[data.settings.theme] ?? '#021238');
     }
   }, [data.settings.theme])
 

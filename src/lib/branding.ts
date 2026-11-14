@@ -9,11 +9,11 @@ export const THEME_LOGOS: Record<ThemeId, string> = {
 }
 
 export const THEME_META: Record<ThemeId, { name: string; copy: string }> = {
-  navy: { name: 'Deep Navy & Gold', copy: 'Dark navy & warm gold' },
-  liquid: { name: 'Midnight Liquid', copy: 'Deep violet glass' },
-  midnight: { name: 'Green Midnight', copy: 'Emerald green glass' },
-  cream: { name: 'Cream Clay', copy: 'Warm sculptural clay' },
-  cyan: { name: 'Graphite Cyan', copy: 'Techy cyan glass' },
+  navy: { name: 'Deep Navy & Gold', copy: 'Dark navy & radiant gold' },
+  liquid: { name: 'Midnight Liquid', copy: 'Pure light violet minimalist' },
+  cream: { name: 'Cream Clay', copy: 'Warm sculptural clay & amber' },
+  midnight: { name: 'Green Midnight', copy: 'Lush dark emerald glow' },
+  cyan: { name: 'Graphite Cyan', copy: 'Dark graphite & vibrant cyan' },
 }
 
 export function getThemeLogo(theme?: ThemeId | string | null): string {

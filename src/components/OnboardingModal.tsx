@@ -12,11 +12,11 @@ import {
 } from '../services/storage'
 
 const ONBOARDING_THEMES: { id: ThemeId; name: string; copy: string; bg: string; barColor: string }[] = [
-  { id: 'liquid',   name: 'Midnight Liquid', copy: 'Deep violet glass',  bg: '#0b0b14', barColor: '#6a3dff' },
-  { id: 'navy',     name: 'Deep Navy / Gold', copy: 'Dark navy & gold',   bg: '#0d1526', barColor: '#c9a227' },
-  { id: 'midnight', name: 'Midnight Glass',   copy: 'Classic dark glass', bg: '#10231e', barColor: '#afdf6d' },
-  { id: 'cream',    name: 'Cream Clay',       copy: 'Warm & minimal',     bg: '#f4ecdc', barColor: '#ad6d40' },
-  { id: 'cyan',     name: 'Graphite Cyan',    copy: 'Techy & futuristic', bg: '#0d1a1f', barColor: '#00d4e8' },
+  { id: 'navy',     name: 'Deep Navy & Gold', copy: 'Dark navy & radiant gold',    bg: '#021238', barColor: '#e9a93d' },
+  { id: 'liquid',   name: 'Midnight Liquid',  copy: 'Pure light violet minimalist', bg: '#faf8fd', barColor: '#42178b' },
+  { id: 'cream',    name: 'Cream Clay',        copy: 'Warm sculptural clay & amber', bg: '#fbf4e8', barColor: '#793a1b' },
+  { id: 'midnight', name: 'Green Midnight',   copy: 'Lush dark emerald glow',       bg: '#01241a', barColor: '#64f3be' },
+  { id: 'cyan',     name: 'Graphite Cyan',    copy: 'Dark graphite & vibrant cyan', bg: '#12141d', barColor: '#1fc4fc' },
 ]
 import {
   backdropVariants, desktopModalVariants, mobileSheetVariants,
