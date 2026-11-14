@@ -1,9 +1,9 @@
 import type { Budget, Settings, Transaction, SplitShare } from '../services/storage'
 export type { SplitShare }
-export const currencies = [{code:'INR',symbol:'₹',name:'Indian Rupee',locale:'en-IN'},{code:'USD',symbol:'$',name:'US Dollar',locale:'en-US'},{code:'EUR',symbol:'€',name:'Euro',locale:'de-DE'},{code:'GBP',symbol:'£',name:'British Pound',locale:'en-GB'},{code:'AED',symbol:'د.إ',name:'UAE Dirham',locale:'en-AE'},{code:'CAD',symbol:'CA$',name:'Canadian Dollar',locale:'en-CA'},{code:'AUD',symbol:'A$',name:'Australian Dollar',locale:'en-AU'},{code:'SGD',symbol:'S$',name:'Singapore Dollar',locale:'en-SG'}] as const
+export const currencies = [{ code: 'INR', symbol: '₹', name: 'Indian Rupee', locale: 'en-IN' }, { code: 'USD', symbol: '$', name: 'US Dollar', locale: 'en-US' }, { code: 'EUR', symbol: '€', name: 'Euro', locale: 'de-DE' }, { code: 'GBP', symbol: '£', name: 'British Pound', locale: 'en-GB' }, { code: 'AED', symbol: 'د.إ', name: 'UAE Dirham', locale: 'en-AE' }, { code: 'CAD', symbol: 'CA$', name: 'Canadian Dollar', locale: 'en-CA' }, { code: 'AUD', symbol: 'A$', name: 'Australian Dollar', locale: 'en-AU' }, { code: 'SGD', symbol: 'S$', name: 'Singapore Dollar', locale: 'en-SG' }] as const
 export const formatMoney = (amount: number, currency = 'INR', compact = false) => { const c = currencies.find(x => x.code === currency) ?? currencies[0]; const safe = Number.isFinite(amount) ? amount : 0; return new Intl.NumberFormat(c.locale, { style: 'currency', currency: c.code, currencyDisplay: 'narrowSymbol', notation: compact ? 'compact' : 'standard', maximumFractionDigits: safe % 1 ? 2 : 0 }).format(safe) }
-export const monthKey = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`
-export const isInMonth = (date: string, key = monthKey()) => date.slice(0,7) === key
+export const monthKey = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+export const isInMonth = (date: string, key = monthKey()) => date.slice(0, 7) === key
 /**
  * PERSONAL EXPENSE AMOUNT
  * ─────────────────────────────────────────────────────────────────────────────
@@ -117,7 +117,7 @@ export const budgetState = (spent: number, limit: number) =>
 
 export const groupByDate = (items: Transaction[]) =>
   items.reduce<Record<string, Transaction[]>>((all, t) => {
-    ;(all[t.date] ??= []).push(t)
+    ; (all[t.date] ??= []).push(t)
     return all
   }, {})
 
@@ -129,7 +129,19 @@ export const labelDate = (value: string) => {
   return new Date(value + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-export const newId = () => crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
+export const newId = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    try {
+      return crypto.randomUUID()
+    } catch { }
+  }
+  // Standard UUID v4 generation fallback
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
+    return v.toString(16)
+  })
+}
 
 export const seedBudgets = (categories: string[]): Budget[] => {
   const now = new Date().toISOString()

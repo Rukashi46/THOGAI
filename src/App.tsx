@@ -453,11 +453,19 @@ function App() {
             settings: { ...defaultSettings, name: user.name || '' }
           }
           let fresh = await cloudSync.pull(user, baseData)
-          // Restore nickname from cloud user profile if local name is blank
-          if (!fresh.settings.name && user.name) {
-            fresh = { ...fresh, settings: { ...fresh.settings, name: user.name } }
+          fresh = {
+            ...fresh,
+            settings: {
+              ...fresh.settings,
+              appLock: false,
+              appLockPin: '',
+              biometricLock: false,
+              name: fresh.settings.name || user.name || ''
+            }
           }
           setData(fresh)
+          storage.write(fresh)
+          await idbStorage.saveUserData(user.id, fresh)
           const count = await cloudSync.checkGuestDataForMigration(user.id)
           if (count > 0) setMigrationTxCount(count)
 

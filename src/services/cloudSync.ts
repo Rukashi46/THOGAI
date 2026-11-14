@@ -176,6 +176,13 @@ class CloudSyncService {
       // 1. Transactions from cloud are the authoritative source of truth for the account
       const txMap = new Map<string, Transaction>()
       mappedCloudTx.forEach((ct) => {
+        // If this id was deleted locally more recently than the cloud copy, keep it gone
+        const tombstone = tombstones[ct.id]
+        if (tombstone) {
+          const cloudTime = new Date(ct.updatedAt).getTime()
+          const deletedTime = new Date(tombstone).getTime()
+          if (deletedTime >= cloudTime) return // local delete wins — skip re-adding
+        }
         txMap.set(ct.id, ct)
       })
 
