@@ -107,6 +107,7 @@ export interface Settings {
   categories: string[]
   incomeCategories: string[]
   accounts: string[]
+  accountBalances: Record<string, number>
   defaultAccount: string
   onboardingCompleted: boolean
   nickname: string
@@ -199,6 +200,7 @@ export const defaultSettings: Settings = {
   categories: defaultExpenseCategories,
   incomeCategories: defaultIncomeCategories,
   accounts: defaultAccounts,
+  accountBalances: {},
   defaultAccount: 'Cash',
   onboardingCompleted: false,
   nickname: ''
@@ -246,6 +248,20 @@ export const storage = {
         defaultAccounts
       )
 
+      // Migrate legacy startingBalance into accountBalances if needed
+      const rawBalances: Record<string, number> =
+        data.settings?.accountBalances && typeof data.settings.accountBalances === 'object'
+          ? { ...data.settings.accountBalances }
+          : {}
+      const legacyBalance = Number(data.settings?.startingBalance ?? 0)
+      if (legacyBalance !== 0 && Object.keys(rawBalances).length === 0) {
+        // First run after migration: seed the default account with the legacy balance
+        const defAcc = (data.settings?.defaultAccount && resolvedAccounts.includes(data.settings.defaultAccount))
+          ? data.settings.defaultAccount
+          : 'Cash'
+        rawBalances[defAcc] = legacyBalance
+      }
+
       return {
         ...fallback,
         ...data,
@@ -256,6 +272,7 @@ export const storage = {
           categories: resolvedExpenseCategories,
           incomeCategories: resolvedIncomeCategories,
           accounts: resolvedAccounts,
+          accountBalances: rawBalances,
           defaultCategory:
             data.settings?.defaultCategory && resolvedExpenseCategories.includes(data.settings.defaultCategory)
               ? data.settings.defaultCategory
@@ -295,6 +312,18 @@ export const storage = {
     const resolvedIncome = safeMergeItems(data.settings?.incomeCategories, defaultIncomeCategories)
     const resolvedAccs = safeMergeItems(data.settings?.accounts, defaultAccounts)
 
+    const importedBalances: Record<string, number> =
+      data.settings?.accountBalances && typeof data.settings.accountBalances === 'object'
+        ? { ...data.settings.accountBalances }
+        : {}
+    const importedLegacy = Number(data.settings?.startingBalance ?? 0)
+    if (importedLegacy !== 0 && Object.keys(importedBalances).length === 0) {
+      const defAcc = (data.settings?.defaultAccount && resolvedAccs.includes(data.settings.defaultAccount))
+        ? data.settings.defaultAccount
+        : 'Cash'
+      importedBalances[defAcc] = importedLegacy
+    }
+
     return {
       ...fallback,
       ...data,
@@ -305,6 +334,7 @@ export const storage = {
         categories: resolvedExpense,
         incomeCategories: resolvedIncome,
         accounts: resolvedAccs,
+        accountBalances: importedBalances,
         defaultCategory:
           data.settings?.defaultCategory && resolvedExpense.includes(data.settings.defaultCategory)
             ? data.settings.defaultCategory

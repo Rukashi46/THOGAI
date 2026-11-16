@@ -91,7 +91,10 @@ export function snapshot(transactions: Transaction[], settings: Settings, key = 
   const allDues = transactions
     .filter((t) => t.type === 'due')
     .reduce((n, t) => n + t.amount, 0)
-  const balance = settings.startingBalance + allCashInflow - allCashOutflow - allDues
+
+  // Total starting balance = sum of all account balances (or legacy startingBalance)
+  const totalStarting = getTotalStartingBalance(settings)
+  const balance = totalStarting + allCashInflow - allCashOutflow - allDues
 
   return {
     income: cashInflow,
@@ -120,6 +123,61 @@ export const groupByDate = (items: Transaction[]) =>
     ; (all[t.date] ??= []).push(t)
     return all
   }, {})
+
+/** Group transactions by month key (YYYY-MM), sorted descending */
+export const groupByMonth = (items: Transaction[]): { month: string; label: string; transactions: Transaction[] }[] => {
+  const map = items.reduce<Record<string, Transaction[]>>((all, t) => {
+    const key = t.date.slice(0, 7)
+    ;(all[key] ??= []).push(t)
+    return all
+  }, {})
+  return Object.keys(map)
+    .sort((a, b) => b.localeCompare(a))
+    .map((month) => ({
+      month,
+      label: new Date(`${month}-01T12:00:00`).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }),
+      transactions: map[month].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt))
+    }))
+}
+
+/**
+ * Returns the sum of all account balances.
+ * Falls back to legacy startingBalance when accountBalances is empty.
+ */
+export function getTotalStartingBalance(settings: Settings): number {
+  const balances = settings.accountBalances
+  if (balances && Object.keys(balances).length > 0) {
+    return Object.values(balances).reduce((sum, v) => sum + (Number.isFinite(v) ? v : 0), 0)
+  }
+  return Number.isFinite(settings.startingBalance) ? settings.startingBalance : 0
+}
+
+/**
+ * Returns per-account balance after applying all transactions.
+ * Transactions without an account are attributed to the defaultAccount.
+ */
+export function getAccountBalances(
+  transactions: Transaction[],
+  settings: Settings
+): { account: string; startingBalance: number; balance: number }[] {
+  const accounts = settings.accounts || ['Cash']
+  const balances = settings.accountBalances || {}
+  const defaultAcc = settings.defaultAccount || 'Cash'
+
+  const result = accounts.map((acc) => {
+    const starting = Number.isFinite(balances[acc]) ? (balances[acc] ?? 0) : 0
+    const txs = transactions.filter((t) => (t.account || defaultAcc) === acc)
+    const inflow = txs.filter((t) => t.type === 'income').reduce((n, t) => n + getCashFlowAmount(t), 0)
+    const outflow = txs.filter((t) => t.type === 'expense').reduce((n, t) => n + getCashFlowAmount(t), 0)
+    const dues = txs.filter((t) => t.type === 'due').reduce((n, t) => n + t.amount, 0)
+    return {
+      account: acc,
+      startingBalance: starting,
+      balance: starting + inflow - outflow - dues
+    }
+  })
+  return result
+}
 
 export const labelDate = (value: string) => {
   const today = new Date().toISOString().slice(0, 10)

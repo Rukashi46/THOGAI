@@ -233,6 +233,9 @@ class CloudSyncService {
           },
           onboardingCompleted: cloudSettings.onboarding_completed ?? rawNotifs._onboarding_completed ?? true,
           nickname: rawNotifs._nickname || cloudSettings.nickname || '',
+          accountBalances: (rawNotifs._account_balances && typeof rawNotifs._account_balances === 'object')
+            ? rawNotifs._account_balances
+            : {},
           // Explicitly do NOT restore PIN or app lock from cloud or other devices:
           appLock: false,
           appLockPin: '',
@@ -402,7 +405,8 @@ class CloudSyncService {
           summary: rawNotifs.summary ?? false,
           _income_categories: settings.incomeCategories,
           _onboarding_completed: settings.onboardingCompleted,
-          _nickname: settings.nickname
+          _nickname: settings.nickname,
+          _account_balances: settings.accountBalances || {}
         },
         updated_at: new Date().toISOString()
       }

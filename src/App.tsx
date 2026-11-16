@@ -12,7 +12,7 @@ import {
   FileText, Upload, CheckCircle2, AlertCircle, MinusCircle, FileSpreadsheet,
   Scale, History, ArrowRight, ArrowLeft, ChevronLeft
 } from 'lucide-react'
-import { categorySpend, currencies, formatMoney, groupByDate, labelDate, monthKey, newId, seedBudgets, snapshot, budgetState } from './lib/finance'
+import { categorySpend, currencies, formatMoney, groupByDate, groupByMonth, labelDate, monthKey, newId, seedBudgets, snapshot, budgetState, getAccountBalances, getTotalStartingBalance } from './lib/finance'
 import {
   defaultAccounts, defaultCategories, defaultExpenseCategories, defaultIncomeCategories,
   defaultSettings, storage, getDefaultTheme, setDefaultTheme,
@@ -50,7 +50,7 @@ import { ReconciliationHistoryModal } from './components/ReconciliationHistoryMo
 import { OnboardingModal } from './components/OnboardingModal'
 import { getCashFlowAmount, getPersonalExpenseAmount, getEarnedIncomeAmount, getOutstandingReceivables } from './lib/finance'
 
-type Page = 'home' | 'ledger' | 'budget' | 'stats' | 'config'
+type Page = 'home' | 'ledger' | 'budget' | 'accounts' | 'stats' | 'config'
 type ModalState =
   | {
     mode: 'transaction'
@@ -154,6 +154,7 @@ const nav = [
   { id: 'home', label: 'Home', icon: Home },
   { id: 'ledger', label: 'Ledger', icon: ClipboardList },
   { id: 'budget', label: 'Budget', icon: WalletCards },
+  { id: 'accounts', label: 'Accounts', icon: Landmark },
   { id: 'stats', label: 'Stats', icon: BarChart3 },
   { id: 'config', label: 'Settings', icon: Settings2 }
 ] as const
@@ -923,6 +924,15 @@ function App() {
                 askConfirm={askConfirm}
               />
             )}
+            {page === 'accounts' && (
+              <AccountsPage
+                data={data}
+                setSettings={setSettings}
+                open={open}
+                toast={setToast}
+                askConfirm={askConfirm}
+              />
+            )}
             {page === 'stats' && <StatsPage data={data} setPage={setPage} />}
             {page === 'config' && (
               <ConfigPage
@@ -1244,6 +1254,9 @@ function Ledger({
   }, [transactions, query, type, category, dateFilter, specificDate, rangeStart, rangeEnd, todayStr, yesterdayStr])
 
   const groups = groupByDate(filtered)
+  const monthGroups = groupByMonth(filtered)
+  // Use month-grouped sticky-header view when filter spans multiple days
+  const useMonthView = !['today', 'yesterday', 'specific'].includes(dateFilter)
   const receivables = getOutstandingReceivables(transactions)
   const totalReceivable = receivables.reduce((s, r) => s + r.totalOwed, 0)
 
@@ -1362,48 +1375,71 @@ function Ledger({
 
       {filtered.length ? (
         <div className="ledger-list">
-          {Object.entries(groups).map(([date, items]) => (
-            <section key={date}>
-              <h3>{labelDate(date)}</h3>
-              <motion.div
-                className="transactions"
-                variants={listContainerVariants}
-                initial="initial"
-                animate="animate"
-              >
-                {items.map((t) => (
-                  <TransactionRow
-                    key={t.id}
-                    tx={t}
-                    currency={currency}
-                    onClick={() => open(t.type, t.category, t)}
-                    actions={
-                      <>
-                        <IconButton
-                          label="Edit transaction"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            open(t.type, t.category, t)
-                          }}
-                        >
-                          <Pencil size={16} />
-                        </IconButton>
-                        <IconButton
-                          label="Delete transaction"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            remove(t.id)
-                          }}
-                        >
-                          <Trash2 size={16} />
-                        </IconButton>
-                      </>
-                    }
-                  />
-                ))}
-              </motion.div>
-            </section>
-          ))}
+          {useMonthView ? (
+            monthGroups.map(({ month, label, transactions: monthTxs }) => {
+              const monthIncome = monthTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
+              const monthExpense = monthTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
+              const monthNet = monthIncome - monthExpense
+              const dayGroups = groupByDate(monthTxs)
+              return (
+                <div key={month} className="month-group">
+                  <div className="month-sticky-header">
+                    <div className="month-sticky-label">{label}</div>
+                    <div className="month-sticky-stats">
+                      <span className="month-stat positive">+{formatMoney(monthIncome, currency)}</span>
+                      <span className="month-stat negative">−{formatMoney(monthExpense, currency)}</span>
+                      <span className={`month-stat net ${monthNet >= 0 ? 'positive' : 'negative'}`}>
+                        {monthNet >= 0 ? '+' : '−'}{formatMoney(Math.abs(monthNet), currency)}
+                      </span>
+                    </div>
+                  </div>
+                  {Object.entries(dayGroups).map(([date, items]) => (
+                    <section key={date} className="day-group">
+                      <h3 className="day-label">{labelDate(date)}</h3>
+                      <motion.div className="transactions" variants={listContainerVariants} initial="initial" animate="animate">
+                        {items.map((t) => (
+                          <TransactionRow
+                            key={t.id}
+                            tx={t}
+                            currency={currency}
+                            onClick={() => open(t.type, t.category, t)}
+                            actions={
+                              <>
+                                <IconButton label="Edit transaction" onClick={(e) => { e.stopPropagation(); open(t.type, t.category, t) }}><Pencil size={16} /></IconButton>
+                                <IconButton label="Delete transaction" onClick={(e) => { e.stopPropagation(); remove(t.id) }}><Trash2 size={16} /></IconButton>
+                              </>
+                            }
+                          />
+                        ))}
+                      </motion.div>
+                    </section>
+                  ))}
+                </div>
+              )
+            })
+          ) : (
+            Object.entries(groups).map(([date, items]) => (
+              <section key={date}>
+                <h3>{labelDate(date)}</h3>
+                <motion.div className="transactions" variants={listContainerVariants} initial="initial" animate="animate">
+                  {items.map((t) => (
+                    <TransactionRow
+                      key={t.id}
+                      tx={t}
+                      currency={currency}
+                      onClick={() => open(t.type, t.category, t)}
+                      actions={
+                        <>
+                          <IconButton label="Edit transaction" onClick={(e) => { e.stopPropagation(); open(t.type, t.category, t) }}><Pencil size={16} /></IconButton>
+                          <IconButton label="Delete transaction" onClick={(e) => { e.stopPropagation(); remove(t.id) }}><Trash2 size={16} /></IconButton>
+                        </>
+                      }
+                    />
+                  ))}
+                </motion.div>
+              </section>
+            ))
+          )}
         </div>
       ) : (
         <div className="no-results">
@@ -1497,6 +1533,208 @@ function TransactionRow({
   )
 }
 
+
+// ─── Accounts Page ────────────────────────────────────────────────────────────
+function AccountsPage({
+  data,
+  setSettings,
+  open,
+  toast,
+  askConfirm
+}: {
+  data: FinanceData
+  setSettings: (p: Partial<Settings>) => void
+  open: (t?: TransactionType, c?: string) => void
+  toast: (s: string) => void
+  askConfirm: (opts: Omit<ConfirmDialogState, 'onCancel'> & { onCancel?: () => void }) => void
+}) {
+  const { settings, transactions } = data
+  const f = (n: number) => formatMoney(n, settings.currency)
+  const accountBalances = getAccountBalances(transactions, settings)
+  const totalBalance = accountBalances.reduce((s, a) => s + a.balance, 0)
+
+  const [editingAccount, setEditingAccount] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState('')
+  const [newAccName, setNewAccName] = useState('')
+  const [showAddAcc, setShowAddAcc] = useState(false)
+
+  const startEdit = (acc: string, currentBalance: number) => {
+    setEditingAccount(acc)
+    setEditValue(String(currentBalance === 0 ? '' : currentBalance))
+  }
+
+  const commitEdit = (acc: string) => {
+    const val = parseFloat(editValue)
+    const newBalance = Number.isFinite(val) ? val : 0
+    const updated = { ...settings.accountBalances, [acc]: newBalance }
+    setSettings({ accountBalances: updated, startingBalance: Object.values(updated).reduce((s, v) => s + v, 0) })
+    setEditingAccount(null)
+    toast(`${acc} balance updated`)
+  }
+
+  const addAccount = () => {
+    const name = newAccName.trim()
+    if (!name) return
+    if (settings.accounts.some(a => a.toLowerCase() === name.toLowerCase())) {
+      toast('Account already exists')
+      return
+    }
+    const newAccounts = [...settings.accounts, name]
+    const newBalances = { ...settings.accountBalances, [name]: 0 }
+    setSettings({ accounts: newAccounts, accountBalances: newBalances })
+    setNewAccName('')
+    setShowAddAcc(false)
+    toast(`${name} added`)
+  }
+
+  const removeAccount = (acc: string) => {
+    if (settings.accounts.length <= 1) { toast('At least one account is required'); return }
+    askConfirm({
+      title: `Remove "${acc}"?`,
+      message: `Transactions tagged to "${acc}" won't be deleted — just re-tag them if needed.`,
+      confirmText: 'Remove',
+      danger: true,
+      icon: 'trash',
+      onConfirm: () => {
+        const newAccounts = settings.accounts.filter(a => a !== acc)
+        const newBalances = { ...settings.accountBalances }
+        delete newBalances[acc]
+        const newDef = settings.defaultAccount === acc ? newAccounts[0] : settings.defaultAccount
+        setSettings({ accounts: newAccounts, accountBalances: newBalances, defaultAccount: newDef })
+        toast(`${acc} removed`)
+      }
+    })
+  }
+
+  const setDefault = (acc: string) => {
+    setSettings({ defaultAccount: acc })
+    toast(`${acc} set as default`)
+  }
+
+  return (
+    <div className="accounts-page">
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">Your wallets</p>
+          <h1>Accounts</h1>
+          <p>Track each bank, cash, or wallet separately.</p>
+        </div>
+        <div className="heading-actions desktop-heading-actions">
+          <button className="button primary desktop-add" onClick={() => { setShowAddAcc(true); setNewAccName('') }}>
+            <Plus size={17} /> Add account
+          </button>
+        </div>
+      </div>
+
+      {/* Total balance hero */}
+      <motion.section className="accounts-total-card" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={iosSpring}>
+        <div className="accounts-total-label">Total balance across all accounts</div>
+        <div className="accounts-total-value">{f(totalBalance)}</div>
+        <div className="accounts-total-sub">{settings.accounts.length} account{settings.accounts.length !== 1 ? 's' : ''}</div>
+      </motion.section>
+
+      {/* Per-account cards */}
+      <motion.div className="accounts-list" variants={listContainerVariants} initial="initial" animate="animate">
+        {accountBalances.map(({ account, startingBalance, balance }) => {
+          const I = accountIcons[account] || WalletCards
+          const isDefault = settings.defaultAccount === account
+          const isEditing = editingAccount === account
+          return (
+            <motion.div
+              key={account}
+              className={`account-card ${isDefault ? 'is-default' : ''}`}
+              variants={listItemVariants}
+            >
+              <div className="account-card-top">
+                <span className="account-card-icon"><I size={20} /></span>
+                <div className="account-card-info">
+                  <div className="account-card-name">
+                    {account}
+                    {isDefault && <span className="account-default-badge">Default</span>}
+                  </div>
+                  <div className="account-card-sub">
+                    {startingBalance !== 0 ? `Opening ₹${startingBalance.toLocaleString('en-IN')} · ` : ''}
+                    {transactions.filter(t => (t.account || settings.defaultAccount) === account).length} transactions
+                  </div>
+                </div>
+                <div className={`account-card-balance ${balance < 0 ? 'negative' : 'positive'}`}>
+                  {f(balance)}
+                </div>
+              </div>
+
+              {isEditing ? (
+                <div className="account-card-edit">
+                  <label>Opening balance</label>
+                  <div className="account-edit-row">
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      className="setting-input amount"
+                      value={editValue}
+                      onChange={e => setEditValue(e.target.value)}
+                      placeholder="0"
+                      autoFocus
+                      onKeyDown={e => { if (e.key === 'Enter') commitEdit(account); if (e.key === 'Escape') setEditingAccount(null) }}
+                    />
+                    <button className="button compact primary" onClick={() => commitEdit(account)}>Save</button>
+                    <button className="button compact ghost" onClick={() => setEditingAccount(null)}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="account-card-actions">
+                  <button className="button compact ghost" onClick={() => startEdit(account, startingBalance)}>
+                    <Pencil size={13} /> Set opening balance
+                  </button>
+                  {!isDefault && (
+                    <button className="button compact ghost" onClick={() => setDefault(account)}>
+                      <Check size={13} /> Set default
+                    </button>
+                  )}
+                  {!isDefault && (
+                    <button className="button compact ghost danger-ghost" onClick={() => removeAccount(account)}>
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                </div>
+              )}
+            </motion.div>
+          )
+        })}
+      </motion.div>
+
+      {/* Add account inline form */}
+      {showAddAcc && (
+        <motion.div
+          className="account-add-form"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 4 }}
+        >
+          <input
+            value={newAccName}
+            onChange={e => setNewAccName(e.target.value)}
+            placeholder="Account name (e.g. Indian Bank, KVB, Paytm...)"
+            autoFocus
+            onKeyDown={e => { if (e.key === 'Enter') addAccount(); if (e.key === 'Escape') setShowAddAcc(false) }}
+          />
+          <div className="account-add-actions">
+            <button className="button compact primary" onClick={addAccount} disabled={!newAccName.trim()}>
+              <Plus size={15} /> Add
+            </button>
+            <button className="button compact ghost" onClick={() => setShowAddAcc(false)}>Cancel</button>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Mobile add button */}
+      <div className="mobile-add-row">
+        <button className="button secondary" onClick={() => { setShowAddAcc(true); setNewAccName('') }}>
+          <Plus size={16} /> Add account
+        </button>
+      </div>
+    </div>
+  )
+}
 
 function BudgetPage({
   data,
