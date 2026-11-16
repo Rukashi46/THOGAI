@@ -1,6 +1,6 @@
 import type { Budget, Settings, Transaction } from './storage'
 import { formatMoney, monthKey, snapshot } from '../lib/finance'
-import { getApiUrl } from '../lib/api'
+import { getApiBaseUrl, getApiUrl } from '../lib/api'
 
 export interface FinancialContext {
   currency: string
@@ -150,7 +150,22 @@ export function generateLocalAiResponse(prompt: string, ctx: FinancialContext): 
       `3. Always ensure minimum obligations are satisfied before expanding discretionary spend.`
   }
 
-  // 5. Default overview
+  // 5. Help / Greeting
+  if (lower.includes('hello') || lower.includes('hi') || lower.includes('hey') || lower.includes('help')) {
+    return `### 👋 Welcome to THOGAI Financial AI\n\n` +
+      `I am your private personal finance advisor. Here is a snapshot of where you stand right now:\n\n` +
+      `• **Current Retained Balance**: **${f(ctx.remaining)}**\n` +
+      `• **Monthly Income**: ${f(ctx.income)}\n` +
+      `• **Monthly Outflows**: ${f(ctx.expenses)}\n` +
+      (ctx.budget ? `• **Budget Allocation**: ${ctx.budgetUsed}% utilized (${f(ctx.budgetRemaining)} remaining)\n` : '') +
+      `\n**You can ask me anything, such as**:\n` +
+      `1. *"How is my 50/30/20 budget looking?"*\n` +
+      `2. *"Analyze my highest expenses and spending patterns."*\n` +
+      `3. *"How can I save ₹1,00,000 this year?"*\n` +
+      `4. *"What is the best strategy to settle my pending dues?"*`
+  }
+
+  // 6. Default overview
   const top = ctx.largestCategories[0]
   let summary = `### 🤖 THOGAI Financial Overview\n\n`
   summary += `• **Current Balance**: ${f(ctx.remaining)}\n`
@@ -167,7 +182,89 @@ export function generateLocalAiResponse(prompt: string, ctx: FinancialContext): 
 }
 
 /**
- * Communicates with the secure THOGAI server endpoint (/api/ai).
+ * Direct Gemini API call for mobile/Capacitor environments where a local serverless
+ * backend is not running on localhost.
+ */
+async function callDirectGemini(
+  message: string,
+  conversationHistory: ConversationTurn[],
+  financialContext: FinancialContext
+): Promise<string | null> {
+  const apiKey = (import.meta.env.VITE_GEMINI_API_KEY || '').trim()
+
+  if (!apiKey) return null
+
+  const preferredModel = (import.meta.env.VITE_GEMINI_MODEL || 'gemini-3.5-flash-lite').trim()
+  const candidateModels = Array.from(new Set([
+    preferredModel,
+    'gemini-3.5-flash-lite',
+    'gemini-3.5-flash',
+    'gemini-flash-latest'
+  ]))
+
+  const ctxString = JSON.stringify(financialContext, null, 2)
+  const systemInstructionText = `You are THOGAI AI, an expert personal financial advisor embedded directly inside the user's private personal finance application (THOGAI).
+The user's current live financial snapshot is:
+${ctxString}
+
+Guidelines:
+1. Provide personalized financial guidance referencing the user's exact figures above (currency, expenses, income, budget status, dues).
+2. For 50/30/20 budgets, break down actual income into 50% Needs, 30% Wants, 20% Savings with specific amounts.
+3. For spending analysis, focus on their top spending categories and burn rate.
+4. For savings goals and debt payoffs, provide structured, realistic milestones based on their actual available surplus and outstanding dues.
+5. Format your answer cleanly in markdown using bullet points, numbered lists, and bold numbers.
+6. Keep recommendations actionable, practical, and empathetic. Do not invent debt or transactions not present in the context.`
+
+  const contents: { role: 'user' | 'model'; parts: { text: string }[] }[] = []
+  for (const turn of conversationHistory) {
+    if (turn.text && turn.text.trim()) {
+      contents.push({
+        role: turn.role === 'model' ? 'model' : 'user',
+        parts: [{ text: turn.text.trim() }]
+      })
+    }
+  }
+  contents.push({
+    role: 'user',
+    parts: [{ text: message.trim() }]
+  })
+
+  const payload = {
+    systemInstruction: {
+      parts: [{ text: systemInstructionText }]
+    },
+    contents
+  }
+
+  for (const model of candidateModels) {
+    try {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${apiKey}`
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+
+      if (!res.ok) {
+        continue
+      }
+
+      const data = await res.json()
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text
+      if (text && typeof text === 'string') {
+        return text.trim()
+      }
+    } catch {
+      // try next model
+    }
+  }
+
+  return null
+}
+
+/**
+ * Communicates with the secure THOGAI server endpoint or directly via Gemini API
+ * when running on mobile (Capacitor/APK).
  * Automatically preserves multi-turn conversation history.
  * Falls back to deterministic local offline advisor if unavailable.
  */
@@ -184,37 +281,50 @@ export async function queryAiAdvisor(
     }
   }
 
-  try {
-    const res = await fetch(getApiUrl('/api/ai'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message,
-        conversationHistory,
-        financialContext
+  const hasConfiguredApiUrl = Boolean(getApiBaseUrl())
+
+  // 1. If backend URL is explicitly configured, try serverless route first
+  if (hasConfiguredApiUrl) {
+    try {
+      const res = await fetch(getApiUrl('/api/ai'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message,
+          conversationHistory,
+          financialContext
+        })
       })
-    })
 
-    const data = await res.json().catch(() => ({}))
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data?.text) {
+        return {
+          text: data.text,
+          isOffline: false
+        }
+      }
+    } catch {
+      // fallback to direct Gemini call below
+    }
+  }
 
-    if (res.ok && data?.text) {
+  // 2. Direct Gemini call (Primary path on mobile/Capacitor APK & fallback for web)
+  try {
+    const directText = await callDirectGemini(message, conversationHistory, financialContext)
+    if (directText) {
       return {
-        text: data.text,
+        text: directText,
         isOffline: false
       }
     }
-
-    // Fall back cleanly to deterministic financial advisor logic
-    const localFallback = generateLocalAiResponse(message, financialContext)
-    return {
-      text: localFallback || 'Unable to get advice right now. Please try again.',
-      isOffline: true
-    }
   } catch {
-    const localFallback = generateLocalAiResponse(message, financialContext)
-    return {
-      text: localFallback || 'Unable to get advice right now. Please try again.',
-      isOffline: true
-    }
+    // fallback to local deterministic advisor
+  }
+
+  // 3. Fall back cleanly to deterministic financial advisor logic
+  const localFallback = generateLocalAiResponse(message, financialContext)
+  return {
+    text: localFallback || 'Unable to get advice right now. Please try again.',
+    isOffline: true
   }
 }

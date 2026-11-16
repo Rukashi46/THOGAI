@@ -12,7 +12,7 @@ export async function handleAiRequest(
   envModel?: string
 ): Promise<{ status: number; body: Record<string, unknown> }> {
   const apiKey = envApiKey || process.env.GEMINI_API_KEY || ''
-  const model = envModel || process.env.GEMINI_MODEL || 'gemini-3.6-flash'
+  const preferredModel = envModel || process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite'
 
   if (!apiKey || !apiKey.trim()) {
     return {
@@ -71,52 +71,49 @@ Guidelines:
     contents
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model.trim())}:generateContent?key=${apiKey.trim()}`
+  const candidateModels = Array.from(new Set([
+    preferredModel.trim(),
+    'gemini-3.5-flash-lite',
+    'gemini-3.5-flash',
+    'gemini-flash-latest'
+  ]))
 
-  try {
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(geminiPayload)
-    })
+  let lastErrorMsg = ''
+  for (const model of candidateModels) {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${apiKey.trim()}`
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(geminiPayload)
+      })
 
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}))
-      const errMsg = errData?.error?.message || `API error ${res.status}`
-      console.error('Gemini API error status:', res.status, errMsg)
-      return {
-        status: res.status >= 400 && res.status < 500 ? 400 : 502,
-        body: {
-          error: 'SERVICE_ERROR',
-          message: 'Unable to get advice right now. Please try again.'
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        lastErrorMsg = errData?.error?.message || `API error ${res.status}`
+        console.warn(`Gemini model ${model} returned ${res.status}: ${lastErrorMsg}. Retrying candidate...`)
+        continue
+      }
+
+      const data = await res.json()
+      const responseText = data?.candidates?.[0]?.content?.parts?.[0]?.text
+      if (responseText) {
+        return {
+          status: 200,
+          body: { text: responseText }
         }
       }
+    } catch (err: unknown) {
+      lastErrorMsg = err instanceof Error ? err.message : 'Network failure'
+      console.warn(`Gemini model ${model} network error: ${lastErrorMsg}`)
     }
+  }
 
-    const data = await res.json()
-    const responseText = data?.candidates?.[0]?.content?.parts?.[0]?.text
-
-    if (!responseText) {
-      return {
-        status: 502,
-        body: {
-          error: 'EMPTY_RESPONSE',
-          message: 'Unable to get advice right now. Please try again.'
-        }
-      }
-    }
-
-    return {
-      status: 200,
-      body: { text: responseText }
-    }
-  } catch {
-    return {
-      status: 503,
-      body: {
-        error: 'NETWORK_ERROR',
-        message: 'Unable to get advice right now. Please try again.'
-      }
+  return {
+    status: 502,
+    body: {
+      error: 'SERVICE_ERROR',
+      message: 'Unable to get advice right now. Please try again.'
     }
   }
 }
