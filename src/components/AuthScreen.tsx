@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Leaf, Mail, Lock, User, ArrowRight, Check, AlertCircle, Sparkles, KeyRound, HardDrive, Send, MailCheck, RefreshCw, Download } from 'lucide-react'
+import { Leaf, Mail, Lock, User, ArrowRight, Check, AlertCircle, Sparkles, KeyRound, HardDrive, Send, MailCheck, RefreshCw, Download, Smartphone } from 'lucide-react'
 import { authService, type AuthUser } from '../services/auth'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { authStepVariants, iosSpring } from '../lib/motion'
@@ -338,12 +338,13 @@ export function AuthScreen({
       </header>
 
       <div className="auth-card-wrap">
-        <motion.div
-          className="auth-card"
-          initial={{ opacity: 0, scale: 0.96, y: 15 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={iosSpring}
-        >
+        <div className="auth-card-container">
+          <motion.div
+            className="auth-card"
+            initial={{ opacity: 0, scale: 0.96, y: 15 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={iosSpring}
+          >
           {/* Cloud vs Local Mode Status Banner */}
           {!configured && (
             <div className="auth-status-banner local">
@@ -899,9 +900,14 @@ export function AuthScreen({
 
         {!isNativePlatform() && (
           <div className="auth-download-banner">
-            <div>
-              <strong>THOGAI for Android</strong>
-              <div style={{ fontSize: 11, color: 'var(--muted)' }}>Get the native mobile APK</div>
+            <div className="auth-download-info">
+              <div className="auth-download-icon">
+                <Smartphone size={17} />
+              </div>
+              <div>
+                <strong>THOGAI for Android</strong>
+                <span>Get the native mobile APK</span>
+              </div>
             </div>
             <a href="/THOGAI.apk" download="THOGAI.apk" className="auth-download-link" title="Download THOGAI Android APK">
               <Download size={13} />
@@ -909,6 +915,7 @@ export function AuthScreen({
             </a>
           </div>
         )}
+        </div>
       </div>
     </div>
   )
