@@ -7,6 +7,10 @@
       "destination": "/api/$1"
     },
     {
+      "source": "/download",
+      "destination": "/THOGAI.apk"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

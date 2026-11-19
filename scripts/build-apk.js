@@ -45,6 +45,16 @@ try {
 
   if (fs.existsSync(sourceApkPath)) {
     fs.copyFileSync(sourceApkPath, targetApkPath)
+
+    // Also mirror to public folder so the APK is always available for web download at /THOGAI.apk
+    const publicApkPath = path.join(rootDir, 'public', 'THOGAI.apk')
+    try {
+      fs.copyFileSync(sourceApkPath, publicApkPath)
+      console.log(`   🌐 Mirrored to web download: ${publicApkPath}`)
+    } catch (e) {
+      console.warn('   ⚠️ Could not copy to public folder:', e.message)
+    }
+
     const stats = fs.statSync(targetApkPath)
     const sizeMb = (stats.size / (1024 * 1024)).toFixed(2)
 

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#10231e" />
+    <meta name="theme-color" content="#0c0c13" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -29,13 +29,15 @@
             if (stored && validThemes.includes(stored)) t = stored;
           }
         }
-        if (t) {
-          document.documentElement.dataset.theme = t;
-          document.documentElement.style.colorScheme = t === 'cream' ? 'light' : 'dark';
-          var metaColors = { cream: '#f4ecdc', cyan: '#0d1a1f', liquid: '#0b0b14', navy: '#0d1526', midnight: '#10231e' };
-          var m = document.querySelector('meta[name="theme-color"]');
-          if (m) m.setAttribute('content', metaColors[t] || '#10231e');
+        // Application default theme is Obsidian Lavender ('navy')
+        if (!t) {
+          t = 'navy';
         }
+        document.documentElement.dataset.theme = t;
+        document.documentElement.style.colorScheme = (t === 'cream' || t === 'liquid') ? 'light' : 'dark';
+        var metaColors = { cream: '#f4ecdc', cyan: '#0d1a1f', liquid: '#0b0b14', navy: '#0c0c13', midnight: '#10231e' };
+        var m = document.querySelector('meta[name="theme-color"]');
+        if (m) m.setAttribute('content', metaColors[t] || '#0c0c13');
       } catch (e) {}
       if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
         window.addEventListener('load', function() {

@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Leaf, Mail, Lock, User, ArrowRight, Check, AlertCircle, Sparkles, KeyRound, HardDrive, Send, MailCheck, RefreshCw } from 'lucide-react'
+import { Leaf, Mail, Lock, User, ArrowRight, Check, AlertCircle, Sparkles, KeyRound, HardDrive, Send, MailCheck, RefreshCw, Download } from 'lucide-react'
 import { authService, type AuthUser } from '../services/auth'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { authStepVariants, iosSpring } from '../lib/motion'
 import type { ThemeId } from '../services/storage'
 import { getThemeLogo } from '../lib/branding'
+import { isNativePlatform } from '../lib/mobile'
 
 interface AuthScreenProps {
   currentTheme: ThemeId
@@ -895,6 +896,19 @@ export function AuthScreen({
             )}
           </AnimatePresence>
         </motion.div>
+
+        {!isNativePlatform() && (
+          <div className="auth-download-banner">
+            <div>
+              <strong>THOGAI for Android</strong>
+              <div style={{ fontSize: 11, color: 'var(--muted)' }}>Get the native mobile APK</div>
+            </div>
+            <a href="/THOGAI.apk" download="THOGAI.apk" className="auth-download-link" title="Download THOGAI Android APK">
+              <Download size={13} />
+              <span>Download APK</span>
+            </a>
+          </div>
+        )}
       </div>
     </div>
   )

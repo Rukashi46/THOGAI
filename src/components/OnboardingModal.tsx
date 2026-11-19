@@ -90,7 +90,7 @@ export function OnboardingModal({
   const [direction, setDirection] = useState(1)
 
   // Step 2: Theme pick
-  const [selectedTheme, setSelectedTheme] = useState<ThemeId>(currentSettings.theme || 'liquid')
+  const [selectedTheme, setSelectedTheme] = useState<ThemeId>(currentSettings.theme || 'navy')
 
   // Step 3: Personalize
   const [nickname, setNickname] = useState<string>(currentSettings.name || '')

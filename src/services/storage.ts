@@ -100,7 +100,14 @@ export interface Settings {
   startingBalance: number
   defaultCategory: string
   hideBalance: boolean
-  notifications: { budget: boolean; dues: boolean; summary: boolean }
+  notifications: {
+    budget: boolean
+    dues: boolean
+    summary: boolean
+    dailyReminder?: boolean
+    dailyReminderTime?: string
+    paymentDetection?: boolean
+  }
   biometricLock: boolean
   appLock: boolean
   appLockPin: string
@@ -187,13 +194,20 @@ export const defaultAccounts: string[] = [
 export const defaultSettings: Settings = {
   name: '',
   currency: 'INR',
-  theme: 'midnight',
+  theme: 'navy',
   defaultTheme: null,
   monthlyBudget: 0,
   startingBalance: 0,
   defaultCategory: 'Food & Dining',
   hideBalance: false,
-  notifications: { budget: true, dues: true, summary: false },
+  notifications: {
+    budget: true,
+    dues: true,
+    summary: false,
+    dailyReminder: true,
+    dailyReminderTime: '20:30',
+    paymentDetection: true
+  },
   biometricLock: false,
   appLock: false,
   appLockPin: '',
@@ -208,7 +222,7 @@ export const defaultSettings: Settings = {
 const KEY = 'thogai.finance.v1'
 const fallback: FinanceData = { transactions: [], budgets: [], settings: defaultSettings }
 const validThemes: ThemeId[] = ['midnight', 'cream', 'cyan', 'liquid', 'navy']
-export const sanitizeTheme = (theme?: unknown): ThemeId => (typeof theme === 'string' && (validThemes as string[]).includes(theme)) ? (theme as ThemeId) : 'midnight'
+export const sanitizeTheme = (theme?: unknown): ThemeId => (typeof theme === 'string' && (validThemes as string[]).includes(theme)) ? (theme as ThemeId) : 'navy'
 
 export function safeMergeItems(existing: unknown, defaults: string[]): string[] {
   if (!Array.isArray(existing) || existing.length === 0) {

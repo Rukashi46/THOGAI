@@ -229,7 +229,10 @@ class CloudSyncService {
           notifications: {
             budget: rawNotifs.budget ?? true,
             dues: rawNotifs.dues ?? true,
-            summary: rawNotifs.summary ?? false
+            summary: rawNotifs.summary ?? false,
+            dailyReminder: rawNotifs.dailyReminder ?? true,
+            dailyReminderTime: rawNotifs.dailyReminderTime || '20:30',
+            paymentDetection: rawNotifs.paymentDetection ?? true
           },
           onboardingCompleted: cloudSettings.onboarding_completed ?? rawNotifs._onboarding_completed ?? true,
           nickname: rawNotifs._nickname || cloudSettings.nickname || '',
@@ -403,6 +406,9 @@ class CloudSyncService {
           budget: rawNotifs.budget ?? true,
           dues: rawNotifs.dues ?? true,
           summary: rawNotifs.summary ?? false,
+          dailyReminder: rawNotifs.dailyReminder ?? true,
+          dailyReminderTime: rawNotifs.dailyReminderTime || '20:30',
+          paymentDetection: rawNotifs.paymentDetection ?? true,
           _income_categories: settings.incomeCategories,
           _onboarding_completed: settings.onboardingCompleted,
           _nickname: settings.nickname,

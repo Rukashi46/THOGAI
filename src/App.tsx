@@ -10,7 +10,7 @@ import {
   HeartPulse, GraduationCap, Film, Plane, Users, Repeat, Smile, Cookie, Receipt, Briefcase,
   Laptop, Building2, Coins, Award, Gift, Handshake, PiggyBank, CreditCard,
   FileText, Upload, CheckCircle2, AlertCircle, MinusCircle, FileSpreadsheet,
-  Scale, History, ArrowRight, ArrowLeft, ChevronLeft
+  Scale, History, ArrowRight, ArrowLeft, ChevronLeft, ExternalLink
 } from 'lucide-react'
 import { categorySpend, currencies, formatMoney, groupByDate, groupByMonth, labelDate, monthKey, newId, seedBudgets, snapshot, budgetState, getAccountBalances, getTotalStartingBalance } from './lib/finance'
 import {
@@ -34,6 +34,9 @@ import { isSupabaseConfigured } from './lib/supabase'
 import { AuthScreen } from './components/AuthScreen'
 import { MoneyOwedModal } from './components/MoneyOwedModal'
 import { getThemeLogo } from './lib/branding'
+import { isNativePlatform } from './lib/mobile'
+import { notificationService } from './services/notifications'
+import { NotificationsModal } from './components/NotificationsModal'
 import {
   pageVariants, desktopModalVariants, mobileSheetVariants, backdropVariants,
   buttonTap, primaryButtonTap, reducedMotionVariants, iosSpring, sheetSpring, snapSpring,
@@ -355,6 +358,58 @@ function App() {
     const wasUnlocked = sessionStorage.getItem('thogai_unlocked') === 'true'
     return hasLock && !wasUnlocked
   })
+
+  // Notifications State
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0)
+
+  // Notification synchronization & alert evaluation
+  useEffect(() => {
+    const updateNotifs = async () => {
+      await notificationService.syncNativeDetectedPayments()
+      const symbol = currencies.find(c => c.code === data.settings.currency)?.symbol || '₹'
+      notificationService.evaluateBudgetAndDueAlerts(
+        data.budgets,
+        data.transactions,
+        symbol,
+        data.settings.notifications.budget,
+        data.settings.notifications.dues
+      )
+      const list = notificationService.getStoredNotifications()
+      setUnreadNotifCount(list.filter(n => !n.read).length)
+    }
+    updateNotifs()
+  }, [data.budgets, data.transactions, data.settings.currency, data.settings.notifications])
+
+  // Configure daily reminder on settings change
+  useEffect(() => {
+    notificationService.scheduleDailyReminder(
+      data.settings.notifications.dailyReminder ?? true,
+      data.settings.notifications.dailyReminderTime || '20:30'
+    )
+  }, [data.settings.notifications.dailyReminder, data.settings.notifications.dailyReminderTime])
+
+  // Check launch intent payment
+  useEffect(() => {
+    notificationService.checkLaunchPayment().then(lp => {
+      if (lp && lp.amount) {
+        const now = new Date().toISOString()
+        open('expense', undefined, {
+          id: '',
+          date: now.slice(0, 10),
+          category: data.settings.defaultCategory || 'Food & Dining',
+          amount: lp.amount,
+          type: 'expense',
+          account: data.settings.defaultAccount || 'Cash',
+          notes: lp.merchant ? `Payment to ${lp.merchant}` : '',
+          description: lp.merchant ? `Payment to ${lp.merchant}` : '',
+          recurring: false,
+          createdAt: now,
+          updatedAt: now
+        })
+      }
+    })
+  }, [])
 
   // Theme synchronization (runs immediately before any render)
   useEffect(() => {
@@ -848,6 +903,17 @@ function App() {
           <SyncIcon size={17} className={syncState === 'syncing' ? 'spin' : ''} />
           <span>{syncLabel}</span>
         </div>
+        {!isNativePlatform() && (
+          <a
+            href="/THOGAI.apk"
+            download="THOGAI.apk"
+            className="side-download-btn"
+            title="Download THOGAI Android App (.apk)"
+          >
+            <Download size={16} />
+            <span>Download Android App</span>
+          </a>
+        )}
       </aside>
 
       <main>
@@ -855,6 +921,17 @@ function App() {
           <Brand small theme={data.settings.theme} />
           <div className="desktop-title">{nav.find((x) => x.id === page)?.label}</div>
           <div className="top-actions">
+            {!isNativePlatform() && (
+              <a
+                href="/THOGAI.apk"
+                download="THOGAI.apk"
+                className="app-download-btn"
+                title="Download THOGAI Android App (.apk)"
+              >
+                <Download size={14} />
+                <span>Get App</span>
+              </a>
+            )}
             <SyncPill state={syncState} onClick={handleManualSync} lastSynced={lastSyncedAt} />
             <IconButton label="Add transaction" onClick={() => open()}>
               <Plus size={19} />
@@ -874,9 +951,14 @@ function App() {
                 <LockKeyhole size={19} />
               </IconButton>
             )}
-            <IconButton label="Notifications">
-              <Bell size={19} />
-            </IconButton>
+            <div style={{ position: 'relative' }}>
+              <IconButton label="Notifications" onClick={() => setShowNotifications(true)}>
+                <Bell size={19} />
+              </IconButton>
+              {unreadNotifCount > 0 && (
+                <span className="notif-badge">{unreadNotifCount > 9 ? '9+' : unreadNotifCount}</span>
+              )}
+            </div>
             <IconButton label="Open settings" onClick={() => changePage('config', 1)} className="mobile-hide">
               <Settings2 size={19} />
             </IconButton>
@@ -1008,6 +1090,22 @@ function App() {
             categories={data.settings.categories || defaultExpenseCategories}
             close={() => setModal(null)}
             submit={saveBudget}
+            onDelete={(id, cat) => {
+              askConfirm({
+                title: 'Delete category budget?',
+                message: `Are you sure you want to remove the monthly target for "${cat}"? Transactions will not be deleted.`,
+                confirmText: 'Delete',
+                cancelText: 'Cancel',
+                danger: true,
+                icon: 'trash',
+                onConfirm: () => {
+                  const nextBudgets = data.budgets.filter((b) => b.id !== id)
+                  save({ ...data, budgets: nextBudgets })
+                  cloudSync.syncBudget('DELETE', { id, category: cat, limit: 0, period: 'monthly', createdAt: '', updatedAt: new Date().toISOString() }, currentUser)
+                  setToast('Category budget deleted')
+                }
+              })
+            }}
           />
         )}
         {modal?.mode === 'ai' && <AiModal data={data} close={() => setModal(null)} />}
@@ -1018,6 +1116,32 @@ function App() {
             close={() => setModal(null)}
             onRecordRepayment={inlineRecordRepayment}
             onMarkAsMyExpense={markAsMyExpense}
+          />
+        )}
+        {showNotifications && (
+          <NotificationsModal
+            close={() => {
+              setShowNotifications(false)
+              setUnreadNotifCount(notificationService.getStoredNotifications().filter(n => !n.read).length)
+            }}
+            onRecordPayment={(p) => {
+              const now = new Date().toISOString()
+              open('expense', undefined, {
+                id: '',
+                date: now.slice(0, 10),
+                category: data.settings.defaultCategory || 'Food & Dining',
+                amount: p.amount,
+                type: 'expense',
+                account: data.settings.defaultAccount || 'Cash',
+                notes: p.merchant ? `Payment to ${p.merchant}` : '',
+                description: p.merchant ? `Payment to ${p.merchant}` : '',
+                recurring: false,
+                createdAt: now,
+                updatedAt: now
+              })
+            }}
+            onOpenBudget={() => changePage('budget', 1)}
+            onOpenDues={() => setModal({ mode: 'money_owed' })}
           />
         )}
         {modal?.mode === 'pin_setup' && (
@@ -1850,7 +1974,12 @@ function BudgetPage({
                   <span className="budget-icon">
                     <I size={18} />
                   </span>
-                  <div className="budget-content">
+                  <div
+                    className="budget-content"
+                    onClick={() => setModal({ mode: 'budget', draft: b })}
+                    style={{ cursor: 'pointer' }}
+                    title="Tap to edit budget"
+                  >
                     <div>
                       <strong>{b.category}</strong>
                       <span className={state}>{f(Math.max(0, b.limit - spent))} remaining</span>
@@ -2498,9 +2627,64 @@ function ConfigPage({
 
         <div className="mb-4 pt-3 border-t border-border-subtle">
           <label className="text-xs font-semibold text-muted uppercase tracking-wider block mb-2">Notifications</label>
-          <ToggleRow title="Budget alerts" detail="When you approach a limit" on={data.settings.notifications.budget} set={v => setSettings({ notifications: { ...data.settings.notifications, budget: v } })} />
+          <ToggleRow
+            title="Daily expense reminder"
+            detail="Evening prompt to record today's spending"
+            on={data.settings.notifications.dailyReminder ?? true}
+            set={v => setSettings({ notifications: { ...data.settings.notifications, dailyReminder: v } })}
+          />
+          {(data.settings.notifications.dailyReminder ?? true) && (
+            <div className="daily-time-row">
+              <div>
+                <strong style={{ fontSize: 13, display: 'block' }}>Reminder time</strong>
+                <small style={{ fontSize: 11, color: 'var(--muted)' }}>When to trigger your daily review</small>
+              </div>
+              <input
+                type="time"
+                className="daily-time-input"
+                value={data.settings.notifications.dailyReminderTime || '20:30'}
+                onChange={e => setSettings({ notifications: { ...data.settings.notifications, dailyReminderTime: e.target.value } })}
+              />
+            </div>
+          )}
+          {isNativePlatform() && (
+            <div style={{ marginTop: 8 }}>
+              <ToggleRow
+                title="Auto-detect UPI & Card Payments"
+                detail="Intercept payment debits from GPay, PhonePe, Paytm & SMS"
+                on={data.settings.notifications.paymentDetection ?? true}
+                set={v => setSettings({ notifications: { ...data.settings.notifications, paymentDetection: v } })}
+              />
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => notificationService.requestListenerAccess()}
+                style={{ fontSize: 11.5, marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              >
+                Configure Android Notification Access <ExternalLink size={12} />
+              </button>
+            </div>
+          )}
+          <ToggleRow title="Budget alerts" detail="When you approach or exceed a limit" on={data.settings.notifications.budget} set={v => setSettings({ notifications: { ...data.settings.notifications, budget: v } })} />
           <ToggleRow title="Due reminders" detail="Keep outstanding payments visible" on={data.settings.notifications.dues} set={v => setSettings({ notifications: { ...data.settings.notifications, dues: v } })} />
           <ToggleRow title="Monthly summaries" detail="A fresh financial recap" on={data.settings.notifications.summary} set={v => setSettings({ notifications: { ...data.settings.notifications, summary: v } })} />
+          <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              className="button ghost compact"
+              onClick={async () => {
+                await notificationService.postNotification(
+                  'THOGAI Custom Alert',
+                  'Your notifications are working perfectly on this device! 🚀',
+                  'system'
+                )
+                toast('Test notification sent')
+              }}
+              style={{ fontSize: 12 }}
+            >
+              <Sparkles size={14} /> Send test notification
+            </button>
+          </div>
         </div>
 
         <div className="mb-4 pt-3 border-t border-border-subtle">
@@ -2549,6 +2733,19 @@ function ConfigPage({
               Terms of Service
             </button>
           </div>
+          {!isNativePlatform() && (
+            <div style={{ marginTop: 14, width: '100%' }}>
+              <a
+                href="/THOGAI.apk"
+                download="THOGAI.apk"
+                className="button primary"
+                style={{ width: '100%', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                title="Download THOGAI Android APK"
+              >
+                <Download size={16} /> Download Android App (.apk)
+              </a>
+            </div>
+          )}
         </div>
       </ConfigSection>
     </div>
@@ -2967,7 +3164,21 @@ function TransactionModal({
     </Modal>
   )
 }
-function BudgetModal({ initial, currency, categories: cats, close, submit }: { initial?: Budget; currency: string; categories: string[]; close: () => void; submit: (category: string, limit: number, id?: string) => void }) {
+function BudgetModal({
+  initial,
+  currency,
+  categories: cats,
+  close,
+  submit,
+  onDelete
+}: {
+  initial?: Budget
+  currency: string
+  categories: string[]
+  close: () => void
+  submit: (category: string, limit: number, id?: string) => void
+  onDelete?: (id: string, category: string) => void
+}) {
   const [category, setCategory] = useState(initial?.category ?? cats[0] ?? 'Food');
   const [limit, setLimit] = useState(initial?.limit ? String(initial.limit) : '');
   const [error, setError] = useState('');
@@ -2997,9 +3208,23 @@ function BudgetModal({ initial, currency, categories: cats, close, submit }: { i
         </div>
       </label>
       {error && <p className="form-error">{error}</p>}
-      <div className="modal-actions">
-        <button className="button ghost" onClick={close}>Cancel</button>
-        <button className="button primary" onClick={save}>{initial ? 'Save budget' : 'Add budget'}</button>
+      <div className="modal-actions" style={{ display: 'flex', justifyContent: initial && onDelete ? 'space-between' : 'flex-end', alignItems: 'center' }}>
+        {initial && onDelete && (
+          <button
+            type="button"
+            className="button danger compact"
+            onClick={() => {
+              onDelete(initial.id, initial.category)
+              close()
+            }}
+          >
+            <Trash2 size={15} /> Delete
+          </button>
+        )}
+        <div style={{ display: 'flex', gap: 9 }}>
+          <button className="button ghost" onClick={close}>Cancel</button>
+          <button className="button primary" onClick={save}>{initial ? 'Save budget' : 'Add budget'}</button>
+        </div>
       </div>
     </Modal>
   );
