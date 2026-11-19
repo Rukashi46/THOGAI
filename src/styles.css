@@ -1512,4 +1512,37 @@ input:-webkit-autofill:active{
   border-color: var(--accent);
 }
 
+/* ─── In-App Auto Update Modal ────────────────────────────────────────────── */
+.update-modal {
+  padding: 22px;
+}
+.update-icon-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface-soft));
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.update-notes-card {
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-top: 6px;
+}
+.update-permission-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warning) 12%, var(--surface-soft));
+  border: 1px solid color-mix(in srgb, var(--warning) 25%, var(--border));
+  margin-top: 12px;
+}
+
+
 

@@ -37,6 +37,8 @@ import { getThemeLogo } from './lib/branding'
 import { isNativePlatform } from './lib/mobile'
 import { notificationService } from './services/notifications'
 import { NotificationsModal } from './components/NotificationsModal'
+import { updaterService, type RemoteVersionInfo } from './services/updater'
+import { UpdateModal } from './components/UpdateModal'
 import {
   pageVariants, desktopModalVariants, mobileSheetVariants, backdropVariants,
   buttonTap, primaryButtonTap, reducedMotionVariants, iosSpring, sheetSpring, snapSpring,
@@ -363,6 +365,10 @@ function App() {
   const [showNotifications, setShowNotifications] = useState(false)
   const [unreadNotifCount, setUnreadNotifCount] = useState(0)
 
+  // In-App Updater State
+  const [updateInfo, setUpdateInfo] = useState<RemoteVersionInfo | null>(null)
+  const [currentAppVersion, setCurrentAppVersion] = useState<string>('1.1.0')
+
   // Notification synchronization & alert evaluation
   useEffect(() => {
     const updateNotifs = async () => {
@@ -410,6 +416,34 @@ function App() {
       }
     })
   }, [])
+
+  // Check for in-app updates on native platform
+  useEffect(() => {
+    if (isNativePlatform()) {
+      updaterService.getCurrentAppInfo().then(info => {
+        if (info.versionName) setCurrentAppVersion(info.versionName)
+      })
+      updaterService.checkForUpdate().then(res => {
+        if (res.hasUpdate && res.remoteInfo) {
+          setUpdateInfo(res.remoteInfo)
+        }
+      })
+    }
+  }, [])
+
+  const handleCheckForUpdates = async () => {
+    setToast('Checking for updates...')
+    try {
+      const res = await updaterService.checkForUpdate()
+      if (res.hasUpdate && res.remoteInfo) {
+        setUpdateInfo(res.remoteInfo)
+      } else {
+        setToast(`THOGAI is up to date (v${res.currentVersion})`)
+      }
+    } catch {
+      setToast('Failed to check for updates. Check internet connection.')
+    }
+  }
 
   // Theme synchronization (runs immediately before any render)
   useEffect(() => {
@@ -1031,6 +1065,8 @@ function App() {
                 onLogout={handleLogout}
                 onShowAuth={() => setShowAuth(true)}
                 askConfirm={askConfirm}
+                appVersion={currentAppVersion}
+                onCheckUpdate={handleCheckForUpdates}
               />
             )}
           </motion.div>
@@ -1142,6 +1178,13 @@ function App() {
             }}
             onOpenBudget={() => changePage('budget', 1)}
             onOpenDues={() => setModal({ mode: 'money_owed' })}
+          />
+        )}
+        {updateInfo && (
+          <UpdateModal
+            info={updateInfo}
+            currentVersion={currentAppVersion}
+            close={() => setUpdateInfo(null)}
           />
         )}
         {modal?.mode === 'pin_setup' && (
@@ -2331,7 +2374,9 @@ function ConfigPage({
   onManualSync,
   onLogout,
   onShowAuth,
-  askConfirm
+  askConfirm,
+  appVersion,
+  onCheckUpdate
 }: {
   data: FinanceData
   setSettings: (p: Partial<Settings>) => void
@@ -2346,6 +2391,8 @@ function ConfigPage({
   onLogout: () => void
   onShowAuth: () => void
   askConfirm: (opts: Omit<ConfirmDialogState, 'onCancel'> & { onCancel?: () => void }) => void
+  appVersion?: string
+  onCheckUpdate?: () => void
 }) {
   const input = useRef<HTMLInputElement>(null);
   const activeExpenseCategories = data.settings.categories || defaultExpenseCategories;
@@ -2720,7 +2767,7 @@ function ConfigPage({
         <div className="about-card">
           <Brand theme={data.settings.theme} />
           <div className="about-meta">
-            <span className="about-version">Version 1.0.0</span>
+            <span className="about-version">Version {appVersion || '1.1.0'}</span>
             <span className="about-sep">·</span>
             <span>Your financial data stays private & secure.</span>
           </div>
@@ -2733,7 +2780,18 @@ function ConfigPage({
               Terms of Service
             </button>
           </div>
-          {!isNativePlatform() && (
+          {isNativePlatform() ? (
+            <div style={{ marginTop: 14, width: '100%' }}>
+              <button
+                type="button"
+                className="button secondary"
+                onClick={onCheckUpdate}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              >
+                <RefreshCw size={15} /> Check for updates
+              </button>
+            </div>
+          ) : (
             <div style={{ marginTop: 14, width: '100%' }}>
               <a
                 href="/THOGAI.apk"

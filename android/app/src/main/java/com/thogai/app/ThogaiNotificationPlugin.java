@@ -235,4 +235,116 @@ public class ThogaiNotificationPlugin extends Plugin {
         }
         call.resolve(ret);
     }
+
+    @PluginMethod
+    public void getAppInfo(PluginCall call) {
+        JSObject ret = new JSObject();
+        try {
+            Context context = getContext();
+            android.content.pm.PackageInfo pInfo = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
+            long versionCode = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P 
+                ? pInfo.getLongVersionCode() 
+                : (long) pInfo.versionCode;
+            ret.put("versionCode", versionCode);
+            ret.put("versionName", pInfo.versionName);
+            ret.put("packageName", context.getPackageName());
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Failed to get app info", e);
+        }
+    }
+
+    @PluginMethod
+    public void canRequestPackageInstalls(PluginCall call) {
+        JSObject ret = new JSObject();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            ret.put("canInstall", getContext().getPackageManager().canRequestPackageInstalls());
+        } else {
+            ret.put("canInstall", true);
+        }
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void openInstallPermissionSettings(PluginCall call) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES);
+                intent.setData(android.net.Uri.parse("package:" + getContext().getPackageName()));
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                getContext().startActivity(intent);
+            }
+            JSObject ret = new JSObject();
+            ret.put("opened", true);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Could not open install permission settings", e);
+        }
+    }
+
+    @PluginMethod
+    public void downloadAndInstallApk(PluginCall call) {
+        String apkUrl = call.getString("apkUrl");
+        if (apkUrl == null || apkUrl.isEmpty()) {
+            call.reject("Missing apkUrl");
+            return;
+        }
+
+        new Thread(() -> {
+            try {
+                Context context = getContext();
+                java.net.URL url = new java.net.URL(apkUrl);
+                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                conn.setConnectTimeout(15000);
+                conn.setReadTimeout(60000);
+                conn.connect();
+
+                if (conn.getResponseCode() != java.net.HttpURLConnection.HTTP_OK) {
+                    call.reject("HTTP error downloading APK: " + conn.getResponseCode());
+                    return;
+                }
+
+                java.io.File cacheDir = context.getExternalCacheDir();
+                if (cacheDir == null) cacheDir = context.getCacheDir();
+                java.io.File apkFile = new java.io.File(cacheDir, "thogai_update.apk");
+
+                if (apkFile.exists()) {
+                    apkFile.delete();
+                }
+
+                java.io.InputStream in = conn.getInputStream();
+                java.io.FileOutputStream out = new java.io.FileOutputStream(apkFile);
+
+                byte[] buffer = new byte[8192];
+                int len;
+                while ((len = in.read(buffer)) != -1) {
+                    out.write(buffer, 0, len);
+                }
+
+                out.flush();
+                out.close();
+                in.close();
+                conn.disconnect();
+
+                // Trigger package installer via FileProvider
+                android.net.Uri apkUri = androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    context.getPackageName() + ".fileprovider",
+                    apkFile
+                );
+
+                Intent installIntent = new Intent(Intent.ACTION_VIEW);
+                installIntent.setDataAndType(apkUri, "application/vnd.android.package-archive");
+                installIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                installIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(installIntent);
+
+                JSObject ret = new JSObject();
+                ret.put("success", true);
+                call.resolve(ret);
+            } catch (Exception e) {
+                call.reject("Failed to download or install update: " + e.getMessage(), e);
+            }
+        }).start();
+    }
 }
