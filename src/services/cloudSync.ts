@@ -239,20 +239,20 @@ class CloudSyncService {
           accountBalances: (rawNotifs._account_balances && typeof rawNotifs._account_balances === 'object')
             ? rawNotifs._account_balances
             : {},
-          // Explicitly do NOT restore PIN or app lock from cloud or other devices:
-          appLock: false,
-          appLockPin: '',
-          biometricLock: false,
-          hideBalance: false
+          // Preserve local device PIN and app lock settings (never wipe them on cloud pull!)
+          appLock: Boolean(localData?.settings?.appLock && localData?.settings?.appLockPin),
+          appLockPin: localData?.settings?.appLockPin || '',
+          biometricLock: Boolean(localData?.settings?.biometricLock),
+          hideBalance: Boolean(localData?.settings?.hideBalance)
         }
       } else {
         mergedSettings = {
           ...defaultSettings,
           name: user.name || 'User',
-          appLock: false,
-          appLockPin: '',
-          biometricLock: false,
-          hideBalance: false
+          appLock: Boolean(localData?.settings?.appLock && localData?.settings?.appLockPin),
+          appLockPin: localData?.settings?.appLockPin || '',
+          biometricLock: Boolean(localData?.settings?.biometricLock),
+          hideBalance: Boolean(localData?.settings?.hideBalance)
         }
       }
 

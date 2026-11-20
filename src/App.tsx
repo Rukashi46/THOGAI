@@ -514,14 +514,17 @@ function App() {
           settings: { ...defaultSettings, name: user.name || '', appLock: false, appLockPin: '', biometricLock: false }
         }
         let fresh = await cloudSync.pull(user, baseData)
-        // Ensure app lock is NOT restored on fresh login
+        // Preserve local device PIN and app lock settings (never wipe them on cloud pull!)
+        const localPin = cached?.settings?.appLockPin || storage.read().settings.appLockPin || ''
+        const localAppLock = Boolean((cached?.settings?.appLock ?? storage.read().settings.appLock) && localPin)
+        const localBiometric = Boolean(cached?.settings?.biometricLock ?? storage.read().settings.biometricLock)
         fresh = {
           ...fresh,
           settings: {
             ...fresh.settings,
-            appLock: false,
-            appLockPin: '',
-            biometricLock: false,
+            appLock: localAppLock,
+            appLockPin: localPin,
+            biometricLock: localBiometric,
             name: fresh.settings.name || user.name || ''
           }
         }
@@ -566,13 +569,17 @@ function App() {
             settings: { ...defaultSettings, name: user.name || '' }
           }
           let fresh = await cloudSync.pull(user, baseData)
+          // Preserve local device PIN and app lock settings (never wipe on app startup/update!)
+          const initPin = cached?.settings?.appLockPin || storage.read().settings.appLockPin || ''
+          const initAppLock = Boolean((cached?.settings?.appLock ?? storage.read().settings.appLock) && initPin)
+          const initBiometric = Boolean(cached?.settings?.biometricLock ?? storage.read().settings.biometricLock)
           fresh = {
             ...fresh,
             settings: {
               ...fresh.settings,
-              appLock: false,
-              appLockPin: '',
-              biometricLock: false,
+              appLock: initAppLock,
+              appLockPin: initPin,
+              biometricLock: initBiometric,
               name: fresh.settings.name || user.name || ''
             }
           }

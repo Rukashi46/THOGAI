@@ -132,16 +132,16 @@ export function MoneyOwedModal({ transactions, currency, close, onRecordRepaymen
   }, [person, currency])
 
   const title =
-    view === 'list'   ? 'Money Owed to You'
-    : view === 'person' ? (person?.person ?? '')
-    : view === 'settle' ? (mode === 'full' ? 'Record Full Payment' : 'Record Partial Payment')
-    : 'Cover as My Expense'
+    view === 'list' ? 'Money Owed to You'
+      : view === 'person' ? (person?.person ?? '')
+        : view === 'settle' ? (mode === 'full' ? 'Record Full Payment' : 'Record Partial Payment')
+          : 'Cover as My Expense'
 
   const sub =
-    view === 'list'   ? `${f(totalAll)} · ${rec.length} ${rec.length === 1 ? 'person' : 'people'}`
-    : view === 'person' ? `${f(person?.totalOwed ?? 0)} outstanding`
-    : view === 'settle' ? (item?.description || item?.category || '')
-    : (absorbItem?.description || absorbItem?.category || '')
+    view === 'list' ? `${f(totalAll)} · ${rec.length} ${rec.length === 1 ? 'person' : 'people'}`
+      : view === 'person' ? `${f(person?.totalOwed ?? 0)} outstanding`
+        : view === 'settle' ? (item?.description || item?.category || '')
+          : (absorbItem?.description || absorbItem?.category || '')
 
   const MV = isMobile ? mobileSheetVariants : desktopModalVariants
 
@@ -153,12 +153,16 @@ export function MoneyOwedModal({ transactions, currency, close, onRecordRepaymen
         initial="initial" animate="animate" exit="exit"
         role="dialog" aria-modal="true" aria-label="Money Owed to You"
         onClick={e => e.stopPropagation()}
-        style={{ display: 'flex', flexDirection: 'column',
-          maxHeight: isMobile ? '90dvh' : '88vh', padding: 0 }}
+        style={{
+          display: 'flex', flexDirection: 'column',
+          maxHeight: isMobile ? '90dvh' : '88vh', padding: 0
+        }}
       >
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-          gap: 10, padding: '20px 20px 14px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+          gap: 10, padding: '20px 20px 14px', borderBottom: '1px solid var(--border)', flexShrink: 0
+        }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {view !== 'list' && (
               <motion.button type="button" className="icon-button" onClick={back}
@@ -189,8 +193,10 @@ export function MoneyOwedModal({ transactions, currency, close, onRecordRepaymen
                 exit={{ opacity: 0, x: -16, transition: { duration: 0.14 } }}>
                 {rec.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '48px 20px' }}>
-                    <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--surface-soft)',
-                      display: 'grid', placeItems: 'center', margin: '0 auto 14px', color: 'var(--muted)' }}>
+                    <div style={{
+                      width: 56, height: 56, borderRadius: '50%', background: 'var(--surface-soft)',
+                      display: 'grid', placeItems: 'center', margin: '0 auto 14px', color: 'var(--muted)'
+                    }}>
                       <Users size={24} />
                     </div>
                     <p style={{ fontSize: 15, fontWeight: 600, margin: '0 0 6px', color: 'var(--text)' }}>All settled up</p>
@@ -207,10 +213,12 @@ export function MoneyOwedModal({ transactions, currency, close, onRecordRepaymen
                           animate={{ opacity: 1, y: 0, transition: { ...iosSpring, delay: i * 0.045 } }}
                           whileTap={buttonTap}
                           onClick={() => { setPerson(r); setView('person') }}
-                          style={{ display: 'flex', alignItems: 'center', gap: 14, width: '100%',
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 14, width: '100%',
                             textAlign: 'left', padding: '14px 16px', background: 'var(--surface)',
                             border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
-                            cursor: 'pointer', fontFamily: 'var(--font)' }}>
+                            cursor: 'pointer', fontFamily: 'var(--font)'
+                          }}>
                           <div style={{ position: 'relative', flexShrink: 0 }}>
                             <Ring pct={origTotal > 0 ? (paidBack / origTotal) * 100 : 0} />
                             <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
@@ -247,15 +255,19 @@ export function MoneyOwedModal({ transactions, currency, close, onRecordRepaymen
                 exit={{ opacity: 0, x: 20, transition: { duration: 0.14 } }}
                 style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {/* Summary card */}
-                <div style={{ padding: 16,
+                <div style={{
+                  padding: 16,
                   background: 'color-mix(in srgb, var(--accent) 8%, var(--surface))',
                   border: '1px solid color-mix(in srgb, var(--accent) 25%, var(--border))',
-                  borderRadius: 'var(--radius-sm)' }}>
+                  borderRadius: 'var(--radius-sm)'
+                }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-                    <div style={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
+                    <div style={{
+                      width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
                       background: 'color-mix(in srgb, var(--accent) 18%, var(--surface-soft))',
                       display: 'grid', placeItems: 'center',
-                      fontSize: 18, fontWeight: 700, color: 'var(--accent)' }}>
+                      fontSize: 18, fontWeight: 700, color: 'var(--accent)'
+                    }}>
                       {person.person.charAt(0).toUpperCase()}
                     </div>
                     <div>
@@ -267,26 +279,30 @@ export function MoneyOwedModal({ transactions, currency, close, onRecordRepaymen
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <motion.button type="button" whileTap={primaryButtonTap} onClick={settleAll}
-                      style={{ flex: 1, padding: '10px 12px', background: 'var(--accent)', color: '#fff',
+                      style={{
+                        flex: 1, padding: '10px 12px', background: 'var(--accent)', color: '#fff',
                         border: 'none', borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font)',
                         fontWeight: 600, fontSize: 13, cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6
+                      }}>
                       <CheckCircle2 size={15} /> Settled in full
                     </motion.button>
                     <motion.button type="button" whileTap={buttonTap} onClick={copyReminder}
-                      style={{ padding: '10px 14px', background: 'var(--surface-soft)',
+                      style={{
+                        padding: '10px 14px', background: 'var(--surface-soft)',
                         border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
                         fontFamily: 'var(--font)', fontWeight: 500, fontSize: 13, cursor: 'pointer',
                         display: 'flex', alignItems: 'center', gap: 6,
-                        color: copied ? 'var(--positive)' : 'var(--text-2)', flexShrink: 0 }}>
+                        color: copied ? 'var(--positive)' : 'var(--text-2)', flexShrink: 0
+                      }}>
                       <AnimatePresence mode="wait" initial={false}>
                         {copied
                           ? <motion.span key="c" initial={{ scale: 0.6, opacity: 0 }}
-                              animate={{ scale: 1, opacity: 1, transition: snapSpring }}
-                              exit={{ scale: 0.6, opacity: 0 }}><Check size={15} /></motion.span>
+                            animate={{ scale: 1, opacity: 1, transition: snapSpring }}
+                            exit={{ scale: 0.6, opacity: 0 }}><Check size={15} /></motion.span>
                           : <motion.span key="r" initial={{ scale: 0.8, opacity: 0 }}
-                              animate={{ scale: 1, opacity: 1 }}
-                              exit={{ scale: 0.8, opacity: 0 }}><Copy size={15} /></motion.span>}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.8, opacity: 0 }}><Copy size={15} /></motion.span>}
                       </AnimatePresence>
                       {copied ? 'Copied!' : 'Remind'}
                     </motion.button>
@@ -295,17 +311,23 @@ export function MoneyOwedModal({ transactions, currency, close, onRecordRepaymen
 
                 {/* Per-item breakdown */}
                 <div>
-                  <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)',
-                    letterSpacing: '0.06em', marginBottom: 10 }}>BREAKDOWN</p>
+                  <p style={{
+                    fontSize: 11, fontWeight: 600, color: 'var(--muted)',
+                    letterSpacing: '0.06em', marginBottom: 10
+                  }}>BREAKDOWN</p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {person.items.map(d => {
                       const pctRepaid = d.originalAmount > 0 ? (d.repaidAmount / d.originalAmount) * 100 : 0
                       return (
-                        <div key={d.splitId} style={{ padding: 14, background: 'var(--surface)',
-                          border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}>
+                        <div key={d.splitId} style={{
+                          padding: 14, background: 'var(--surface)',
+                          border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)'
+                        }}>
                           {/* Item header */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between',
-                            alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
+                          <div style={{
+                            display: 'flex', justifyContent: 'space-between',
+                            alignItems: 'flex-start', gap: 10, marginBottom: 10
+                          }}>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 3 }}>
                                 {d.description || d.category}
@@ -325,12 +347,16 @@ export function MoneyOwedModal({ transactions, currency, close, onRecordRepaymen
                           </div>
 
                           {/* Progress bar */}
-                          <div style={{ height: 4, background: 'var(--border)', borderRadius: 100,
-                            overflow: 'hidden', marginBottom: d.repaidAmount > 0 ? 6 : 10 }}>
+                          <div style={{
+                            height: 4, background: 'var(--border)', borderRadius: 100,
+                            overflow: 'hidden', marginBottom: d.repaidAmount > 0 ? 6 : 10
+                          }}>
                             <motion.div initial={{ width: 0 }} animate={{ width: `${pctRepaid}%` }}
                               transition={{ type: 'spring', stiffness: 160, damping: 26 }}
-                              style={{ height: '100%', background: 'var(--positive)',
-                                borderRadius: 100, willChange: 'width' }} />
+                              style={{
+                                height: '100%', background: 'var(--positive)',
+                                borderRadius: 100, willChange: 'width'
+                              }} />
                           </div>
                           {d.repaidAmount > 0 && (
                             <p style={{ fontSize: 10, color: 'var(--positive)', margin: '0 0 10px' }}>
@@ -345,14 +371,16 @@ export function MoneyOwedModal({ transactions, currency, close, onRecordRepaymen
                               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                                 <motion.button type="button" whileTap={buttonTap}
                                   onClick={() => openSettle(d, 'full')}
-                                  style={{ padding: '9px 8px',
+                                  style={{
+                                    padding: '9px 8px',
                                     background: 'color-mix(in srgb, var(--positive) 12%, var(--surface-soft))',
                                     color: 'var(--positive)',
                                     border: '1px solid color-mix(in srgb, var(--positive) 28%, transparent)',
                                     borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font)',
                                     fontWeight: 600, fontSize: 12, lineHeight: 1.3,
                                     display: 'flex', flexDirection: 'column',
-                                    alignItems: 'center', justifyContent: 'center', gap: 3 }}>
+                                    alignItems: 'center', justifyContent: 'center', gap: 3
+                                  }}>
                                   <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                     <CheckCircle2 size={12} /> Paid in full
                                   </span>
@@ -362,14 +390,16 @@ export function MoneyOwedModal({ transactions, currency, close, onRecordRepaymen
                                 </motion.button>
                                 <motion.button type="button" whileTap={buttonTap}
                                   onClick={() => openSettle(d, 'partial')}
-                                  style={{ padding: '9px 8px',
+                                  style={{
+                                    padding: '9px 8px',
                                     background: 'color-mix(in srgb, var(--accent) 10%, var(--surface-soft))',
                                     color: 'var(--accent)',
                                     border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)',
                                     borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font)',
                                     fontWeight: 600, fontSize: 12, lineHeight: 1.3,
                                     display: 'flex', flexDirection: 'column',
-                                    alignItems: 'center', justifyContent: 'center', gap: 3 }}>
+                                    alignItems: 'center', justifyContent: 'center', gap: 3
+                                  }}>
                                   <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                     <SplitSquareHorizontal size={12} /> Paid partially
                                   </span>
@@ -381,11 +411,13 @@ export function MoneyOwedModal({ transactions, currency, close, onRecordRepaymen
                               {/* Secondary: absorb */}
                               <motion.button type="button" whileTap={buttonTap}
                                 onClick={() => { setAbsorbItem(d); setAbsorbAmt(String(d.remainingAmount)); setView('absorb') }}
-                                style={{ padding: '7px 10px', background: 'transparent',
+                                style={{
+                                  padding: '7px 10px', background: 'transparent',
                                   color: 'var(--muted)', border: '1px dashed var(--border)',
                                   borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font)',
                                   fontWeight: 500, fontSize: 11,
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5
+                                }}>
                                 <Minus size={11} /> I'll cover this — not collecting it
                               </motion.button>
                             </div>
@@ -405,8 +437,10 @@ export function MoneyOwedModal({ transactions, currency, close, onRecordRepaymen
                 exit={{ opacity: 0, y: 12, transition: { duration: 0.14 } }}
                 style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                 {/* Context */}
-                <div style={{ padding: 14, background: 'var(--surface-soft)',
-                  borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+                <div style={{
+                  padding: 14, background: 'var(--surface-soft)',
+                  borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)'
+                }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
                     {item.description || item.category}
                   </div>
@@ -424,11 +458,13 @@ export function MoneyOwedModal({ transactions, currency, close, onRecordRepaymen
                         if (m === 'full') setPartialAmt(String(item.remainingAmount))
                         else setPartialAmt('')
                       }}
-                      style={{ padding: '10px 8px', borderRadius: 8,
+                      style={{
+                        padding: '10px 8px', borderRadius: 8,
                         border: `1.5px solid ${mode === m ? 'var(--accent)' : 'var(--border)'}`,
                         background: mode === m ? 'color-mix(in srgb, var(--accent) 12%, var(--surface))' : 'var(--surface-soft)',
                         color: mode === m ? 'var(--accent)' : 'var(--text-2)',
-                        fontFamily: 'var(--font)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+                        fontFamily: 'var(--font)', fontWeight: 600, fontSize: 13, cursor: 'pointer'
+                      }}>
                       {m === 'full' ? `Full — ${f(item.remainingAmount)}` : 'Partial — custom'}
                     </motion.button>
                   ))}
@@ -437,8 +473,10 @@ export function MoneyOwedModal({ transactions, currency, close, onRecordRepaymen
                 {/* Partial amount input */}
                 {mode === 'partial' && (
                   <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0, transition: iosSpring }}>
-                    <label style={{ display: 'block', fontSize: 12, fontWeight: 500,
-                      color: 'var(--muted)', marginBottom: 6 }}>Amount received now</label>
+                    <label style={{
+                      display: 'block', fontSize: 12, fontWeight: 500,
+                      color: 'var(--muted)', marginBottom: 6
+                    }}>Amount received now</label>
                     <div className="input-with-currency">
                       <span className="input-prefix">{sym}</span>
                       <input type="number" inputMode="decimal" step="any" min="0.01"
@@ -459,11 +497,13 @@ export function MoneyOwedModal({ transactions, currency, close, onRecordRepaymen
                         return (
                           <motion.button key={pct} type="button" whileTap={buttonTap}
                             onClick={() => setPartialAmt(String(a))}
-                            style={{ flex: 1, padding: '7px 4px', fontSize: 12, fontWeight: 600, borderRadius: 8,
+                            style={{
+                              flex: 1, padding: '7px 4px', fontSize: 12, fontWeight: 600, borderRadius: 8,
                               border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
                               background: active ? 'color-mix(in srgb, var(--accent) 14%, var(--surface))' : 'var(--surface-soft)',
                               color: active ? 'var(--accent)' : 'var(--text-2)',
-                              cursor: 'pointer', fontFamily: 'var(--font)' }}>
+                              cursor: 'pointer', fontFamily: 'var(--font)'
+                            }}>
                             {pct}%
                           </motion.button>
                         )
@@ -481,19 +521,23 @@ export function MoneyOwedModal({ transactions, currency, close, onRecordRepaymen
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <div style={{ display: 'flex', gap: 10 }}>
                     <motion.button type="button" whileTap={buttonTap} onClick={() => setView('person')}
-                      style={{ flex: 1, padding: '11px 18px', background: 'var(--surface-soft)',
+                      style={{
+                        flex: 1, padding: '11px 18px', background: 'var(--surface-soft)',
                         color: 'var(--text-2)', border: '1px solid var(--border)',
                         borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font)',
-                        fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+                        fontWeight: 600, fontSize: 14, cursor: 'pointer'
+                      }}>
                       Cancel
                     </motion.button>
                     <motion.button type="button" whileTap={primaryButtonTap} onClick={confirmSettle}
                       disabled={mode === 'partial' && (!partialAmt || parseFloat(partialAmt) <= 0 || parseFloat(partialAmt) > item.remainingAmount)}
-                      style={{ flex: 2, padding: '11px 18px', background: 'var(--accent)', color: '#fff',
+                      style={{
+                        flex: 2, padding: '11px 18px', background: 'var(--accent)', color: '#fff',
                         border: 'none', borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font)',
                         fontWeight: 600, fontSize: 14, cursor: 'pointer',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                        opacity: (mode === 'partial' && (!partialAmt || parseFloat(partialAmt) <= 0 || parseFloat(partialAmt) > item.remainingAmount)) ? 0.4 : 1 }}>
+                        opacity: (mode === 'partial' && (!partialAmt || parseFloat(partialAmt) <= 0 || parseFloat(partialAmt) > item.remainingAmount)) ? 0.4 : 1
+                      }}>
                       <CheckCircle2 size={15} />
                       Record {mode === 'full' ? f(item.remainingAmount) : (partialAmt ? f(Math.min(parseFloat(partialAmt), item.remainingAmount)) : '')}
                     </motion.button>
@@ -546,10 +590,12 @@ export function MoneyOwedModal({ transactions, currency, close, onRecordRepaymen
                 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0, transition: iosSpring }}
                 exit={{ opacity: 0, y: 12, transition: { duration: 0.14 } }}
                 style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                <div style={{ padding: 14,
+                <div style={{
+                  padding: 14,
                   background: 'color-mix(in srgb, var(--warning) 10%, var(--surface))',
                   border: '1px solid color-mix(in srgb, var(--warning) 30%, var(--border))',
-                  borderRadius: 'var(--radius-sm)' }}>
+                  borderRadius: 'var(--radius-sm)'
+                }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>
                     What does "cover" mean?
                   </div>
@@ -559,8 +605,10 @@ export function MoneyOwedModal({ transactions, currency, close, onRecordRepaymen
                     <strong style={{ color: 'var(--warning)' }}>Your balance is not affected.</strong>
                   </p>
                 </div>
-                <div style={{ padding: 14, background: 'var(--surface-soft)',
-                  borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+                <div style={{
+                  padding: 14, background: 'var(--surface-soft)',
+                  borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)'
+                }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 3 }}>
                     {absorbItem.description || absorbItem.category}
                   </div>
@@ -569,8 +617,10 @@ export function MoneyOwedModal({ transactions, currency, close, onRecordRepaymen
                   </div>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500,
-                    color: 'var(--muted)', marginBottom: 6 }}>Amount to cover</label>
+                  <label style={{
+                    display: 'block', fontSize: 12, fontWeight: 500,
+                    color: 'var(--muted)', marginBottom: 6
+                  }}>Amount to cover</label>
                   <div className="input-with-currency">
                     <span className="input-prefix">{sym}</span>
                     <input type="number" inputMode="decimal" step="any" min="0.01"
@@ -580,19 +630,23 @@ export function MoneyOwedModal({ transactions, currency, close, onRecordRepaymen
                 </div>
                 <div style={{ display: 'flex', gap: 10 }}>
                   <motion.button type="button" whileTap={buttonTap} onClick={() => setView('person')}
-                    style={{ flex: 1, padding: '11px 18px', background: 'var(--surface-soft)',
+                    style={{
+                      flex: 1, padding: '11px 18px', background: 'var(--surface-soft)',
                       color: 'var(--text-2)', border: '1px solid var(--border)',
                       borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font)',
-                      fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+                      fontWeight: 600, fontSize: 14, cursor: 'pointer'
+                    }}>
                     Cancel
                   </motion.button>
                   <motion.button type="button" whileTap={primaryButtonTap} onClick={confirmAbsorb}
                     disabled={!absorbAmt || parseFloat(absorbAmt) <= 0 || parseFloat(absorbAmt) > absorbItem.remainingAmount}
-                    style={{ flex: 2, padding: '11px 18px', background: 'var(--warning)',
+                    style={{
+                      flex: 2, padding: '11px 18px', background: 'var(--warning)',
                       color: '#172016', border: 'none', borderRadius: 'var(--radius-sm)',
                       fontFamily: 'var(--font)', fontWeight: 600, fontSize: 14, cursor: 'pointer',
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                      opacity: (!absorbAmt || parseFloat(absorbAmt) <= 0 || parseFloat(absorbAmt) > absorbItem.remainingAmount) ? 0.4 : 1 }}>
+                      opacity: (!absorbAmt || parseFloat(absorbAmt) <= 0 || parseFloat(absorbAmt) > absorbItem.remainingAmount) ? 0.4 : 1
+                    }}>
                     <TrendingDown size={15} />
                     Cover {absorbAmt ? f(Math.min(parseFloat(absorbAmt), absorbItem.remainingAmount)) : ''}
                   </motion.button>

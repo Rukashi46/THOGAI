@@ -4,6 +4,8 @@ import { getApiBaseUrl, getApiUrl } from '../lib/api'
 
 export interface FinancialContext {
   currency: string
+  today: string
+  dayOfWeek: string
   income: number
   expenses: number
   remaining: number
@@ -12,7 +14,8 @@ export interface FinancialContext {
   budgetRemaining: number
   categoryTotals: Record<string, number>
   largestCategories: [string, number][]
-  recentTransactions: { date: string; category: string; amount: number; description: string; type: string }[]
+  recentTransactions: { date: string; category: string; amount: number; description: string; type: string; account?: string }[]
+  dailySpending: Record<string, { total: number; count: number; items: { description: string; category: string; amount: number; account?: string }[] }>
   previousDues: number
   recurringCount: number
   fiftyThirtyTwenty: {
@@ -38,19 +41,45 @@ export function buildFinancialContext(transactions: Transaction[], budgets: Budg
   })
 
   const largestCategories = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])
-  const recent = [...transactions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5).map(t => ({
+
+  // Provide up to 50 recent transactions so the AI can inspect exact spending across any recent date
+  const sorted = [...transactions].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt))
+  const recent = sorted.slice(0, 50).map(t => ({
     date: t.date,
     category: t.category,
     amount: t.amount,
     description: t.description || t.category,
-    type: t.type
+    type: t.type,
+    account: t.account
   }))
+
+  // Build daily spending index for exact date queries
+  const dailySpending: Record<string, { total: number; count: number; items: { description: string; category: string; amount: number; account?: string }[] }> = {}
+  sorted.filter(t => t.type === 'expense').forEach(t => {
+    if (!dailySpending[t.date]) {
+      dailySpending[t.date] = { total: 0, count: 0, items: [] }
+    }
+    dailySpending[t.date].total += t.amount
+    dailySpending[t.date].count += 1
+    dailySpending[t.date].items.push({
+      description: t.description || t.category,
+      category: t.category,
+      amount: t.amount,
+      account: t.account
+    })
+  })
+
+  const now = new Date()
+  const todayStr = now.toISOString().slice(0, 10)
+  const dayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long' })
 
   const recurringCount = transactions.filter(t => t.recurring).length
   const income = s.income || 0
 
   return {
     currency: settings.currency,
+    today: todayStr,
+    dayOfWeek,
     income,
     expenses: s.expenses,
     remaining: s.balance,
@@ -60,6 +89,7 @@ export function buildFinancialContext(transactions: Transaction[], budgets: Budg
     categoryTotals,
     largestCategories,
     recentTransactions: recent,
+    dailySpending,
     previousDues: s.dues,
     recurringCount,
     fiftyThirtyTwenty: {
@@ -78,7 +108,68 @@ export function generateLocalAiResponse(prompt: string, ctx: FinancialContext): 
   const lower = prompt.toLowerCase()
   const f = (n: number) => formatMoney(n, ctx.currency)
 
-  // 1. 50/30/20 Budget analysis
+  // 1. Date / Day-specific spending inquiries (e.g. "what is my spending today", "spending on yesterday", "spending on 20th", "spending on Friday")
+  const isDayQuery = lower.includes('today') || lower.includes('yesterday') ||
+    lower.includes('particular day') || lower.includes('that day') ||
+    /(?:spending|spent|expenses?)\s+(?:on|for|in)?\s*(today|yesterday|\d{4}-\d{2}-\d{2}|\d{1,2}(?:st|nd|rd|th)?(?:\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*)?)/i.test(lower) ||
+    lower.includes('how much did i spend') || lower.includes('how much spent') ||
+    /\b(20\d\d-\d\d-\d\d|\d{1,2}(?:st|nd|rd|th)?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec))\b/i.test(lower)
+
+  if (isDayQuery) {
+    let targetDate = ctx.today
+    let targetLabel = `Today (${ctx.today})`
+
+    if (lower.includes('yesterday')) {
+      const d = new Date()
+      d.setDate(d.getDate() - 1)
+      targetDate = d.toISOString().slice(0, 10)
+      targetLabel = `Yesterday (${targetDate})`
+    } else {
+      const isoMatch = lower.match(/\b(\d{4}-\d{2}-\d{2})\b/)
+      if (isoMatch) {
+        targetDate = isoMatch[1]
+        targetLabel = targetDate
+      } else {
+        const dayMatch = lower.match(/\b(\d{1,2})(?:st|nd|rd|th)?\b/)
+        if (dayMatch) {
+          const dayNum = dayMatch[1].padStart(2, '0')
+          const monthPrefix = ctx.today.slice(0, 7)
+          const candidate = `${monthPrefix}-${dayNum}`
+          if (ctx.dailySpending[candidate]) {
+            targetDate = candidate
+            targetLabel = candidate
+          }
+        }
+      }
+    }
+
+    const dayData = ctx.dailySpending[targetDate]
+    if (!dayData || dayData.items.length === 0) {
+      const availableDates = Object.keys(ctx.dailySpending).sort().reverse().slice(0, 5)
+      let out = `### 📅 Spending for ${targetLabel}\n\n`
+      out += `• **Total Spent**: **${f(0)}**\n`
+      out += `• No expense transactions were logged for this date.\n\n`
+      if (availableDates.length > 0) {
+        out += `**Recent Days with Recorded Spending**:\n`
+        availableDates.forEach(dt => {
+          out += `• **${dt}**: ${f(ctx.dailySpending[dt].total)} (${ctx.dailySpending[dt].count} item${ctx.dailySpending[dt].count > 1 ? 's' : ''})\n`
+        })
+      }
+      return out
+    }
+
+    let out = `### 📅 Spending for ${targetLabel}\n\n`
+    out += `• **Total Spent**: **${f(dayData.total)}** across **${dayData.count} transaction${dayData.count > 1 ? 's' : ''}**.\n\n`
+    out += `**Itemized Transactions**:\n`
+    dayData.items.forEach(it => {
+      out += `• **${it.description}**: **${f(it.amount)}** · *${it.category}*`
+      if (it.account) out += ` · (${it.account})`
+      out += `\n`
+    })
+    return out
+  }
+
+  // 2. 50/30/20 Budget analysis
   if (lower.includes('50/30/20') || lower.includes('50-30-20') || (lower.includes('budget') && lower.includes('plan'))) {
     if (ctx.income === 0) {
       return `### 💡 50/30/20 Budget Blueprint\n\n` +
@@ -194,12 +285,13 @@ async function callDirectGemini(
 
   if (!apiKey) return null
 
-  const preferredModel = (import.meta.env.VITE_GEMINI_MODEL || 'gemini-3.5-flash-lite').trim()
+  const preferredModel = (import.meta.env.VITE_GEMINI_MODEL || 'gemini-2.5-flash').trim()
   const candidateModels = Array.from(new Set([
     preferredModel,
-    'gemini-3.5-flash-lite',
-    'gemini-3.5-flash',
-    'gemini-flash-latest'
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+    'gemini-1.5-flash-latest'
   ]))
 
   const ctxString = JSON.stringify(financialContext, null, 2)
@@ -209,11 +301,12 @@ ${ctxString}
 
 Guidelines:
 1. Provide personalized financial guidance referencing the user's exact figures above (currency, expenses, income, budget status, dues).
-2. For 50/30/20 budgets, break down actual income into 50% Needs, 30% Wants, 20% Savings with specific amounts.
-3. For spending analysis, focus on their top spending categories and burn rate.
-4. For savings goals and debt payoffs, provide structured, realistic milestones based on their actual available surplus and outstanding dues.
-5. Format your answer cleanly in markdown using bullet points, numbered lists, and bold numbers.
-6. Keep recommendations actionable, practical, and empathetic. Do not invent debt or transactions not present in the context.`
+2. If the user asks about their spending on a particular day, date, 'today', or 'yesterday', check dailySpending or recentTransactions for that exact date, state the total amount, and list each transaction itemized with its category and account.
+3. For 50/30/20 budgets, break down actual income into 50% Needs, 30% Wants, 20% Savings with specific amounts.
+4. For spending analysis, focus on their top spending categories and burn rate.
+5. For savings goals and debt payoffs, provide structured, realistic milestones based on their actual available surplus and outstanding dues.
+6. Format your answer cleanly in markdown using bullet points, numbered lists, and bold numbers.
+7. Keep recommendations actionable, practical, and empathetic. Do not invent debt or transactions not present in the context.`
 
   const contents: { role: 'user' | 'model'; parts: { text: string }[] }[] = []
   for (const turn of conversationHistory) {

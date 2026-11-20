@@ -12,7 +12,7 @@ export async function handleAiRequest(
   envModel?: string
 ): Promise<{ status: number; body: Record<string, unknown> }> {
   const apiKey = envApiKey || process.env.GEMINI_API_KEY || ''
-  const preferredModel = envModel || process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite'
+  const preferredModel = envModel || process.env.GEMINI_MODEL || 'gemini-2.5-flash'
 
   if (!apiKey || !apiKey.trim()) {
     return {
@@ -40,11 +40,12 @@ ${ctxString}
 
 Guidelines:
 1. Provide personalized financial guidance referencing the user's exact figures above (currency, expenses, income, budget status, dues).
-2. For 50/30/20 budgets, break down actual income into 50% Needs, 30% Wants, 20% Savings with specific amounts.
-3. For spending analysis, focus on their top spending categories and burn rate.
-4. For savings goals and debt payoffs, provide structured, realistic milestones based on their actual available surplus and outstanding dues.
-5. Format your answer cleanly in markdown using bullet points, numbered lists, and bold numbers.
-6. Keep recommendations actionable, practical, and empathetic. Do not invent debt or transactions not present in the context.`
+2. If the user asks about their spending on a particular day, date, 'today', or 'yesterday', check dailySpending or recentTransactions for that exact date, state the total amount, and list each transaction itemized with its category and account.
+3. For 50/30/20 budgets, break down actual income into 50% Needs, 30% Wants, 20% Savings with specific amounts.
+4. For spending analysis, focus on their top spending categories and burn rate.
+5. For savings goals and debt payoffs, provide structured, realistic milestones based on their actual available surplus and outstanding dues.
+6. Format your answer cleanly in markdown using bullet points, numbered lists, and bold numbers.
+7. Keep recommendations actionable, practical, and empathetic. Do not invent debt or transactions not present in the context.`
 
   // Build Gemini contents array preserving multi-turn conversational history
   const contents: { role: 'user' | 'model'; parts: { text: string }[] }[] = []
@@ -73,9 +74,10 @@ Guidelines:
 
   const candidateModels = Array.from(new Set([
     preferredModel.trim(),
-    'gemini-3.5-flash-lite',
-    'gemini-3.5-flash',
-    'gemini-flash-latest'
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+    'gemini-1.5-flash-latest'
   ]))
 
   let lastErrorMsg = ''
