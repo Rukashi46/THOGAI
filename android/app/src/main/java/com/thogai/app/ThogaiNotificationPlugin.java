@@ -38,6 +38,7 @@ public class ThogaiNotificationPlugin extends Plugin {
     @PluginMethod
     public void requestNotificationListenerAccess(PluginCall call) {
         try {
+            PaymentNotificationListener.rebindService(getContext());
             Intent intent = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             getContext().startActivity(intent);

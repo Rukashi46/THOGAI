@@ -63,15 +63,7 @@ export function NotificationsModal({ close, onRecordPayment, onOpenBudget, onOpe
     setNotifications(prev => prev.filter(n => n.id !== id))
   }
 
-  const handleSendTest = async () => {
-    const test = await notificationService.postNotification(
-      'Payment Detected: ₹350',
-      'Paid to Starbucks. Tap to log in your THOGAI Coffee budget.',
-      'payment_detected',
-      { amount: 350, merchant: 'Starbucks' }
-    )
-    setNotifications(prev => [test, ...prev])
-  }
+
 
   const filtered = notifications.filter(n => {
     if (filter === 'payments') return n.type === 'payment_detected'
@@ -302,16 +294,8 @@ export function NotificationsModal({ close, onRecordPayment, onOpenBudget, onOpe
           )}
         </div>
 
-        {/* Footer with test action */}
-        <div className="notif-footer">
-          <button
-            type="button"
-            className="text-button"
-            onClick={handleSendTest}
-            style={{ fontSize: 12 }}
-          >
-            <Sparkles size={14} /> Send test payment notification
-          </button>
+        {/* Footer */}
+        <div className="notif-footer" style={{ justifyContent: 'flex-end' }}>
           <button type="button" className="button ghost compact" onClick={close} style={{ minHeight: 32 }}>
             Done
           </button>

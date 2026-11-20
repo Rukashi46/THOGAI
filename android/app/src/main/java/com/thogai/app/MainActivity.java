@@ -17,6 +17,13 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         enableFullScreen();
         optimizeDisplayAndHardware();
+        PaymentNotificationListener.rebindService(this);
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        PaymentNotificationListener.rebindService(this);
     }
 
     @Override

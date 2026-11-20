@@ -2395,6 +2395,14 @@ function ConfigPage({
   onCheckUpdate?: () => void
 }) {
   const input = useRef<HTMLInputElement>(null);
+  const [listenerEnabled, setListenerEnabled] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (isNativePlatform()) {
+      notificationService.isListenerEnabled().then(setListenerEnabled);
+    }
+  }, []);
+
   const activeExpenseCategories = data.settings.categories || defaultExpenseCategories;
   const activeIncomeCategories = data.settings.incomeCategories || defaultIncomeCategories;
   const activeAccounts = data.settings.accounts || defaultAccounts;
@@ -2702,50 +2710,38 @@ function ConfigPage({
                 on={data.settings.notifications.paymentDetection ?? true}
                 set={v => setSettings({ notifications: { ...data.settings.notifications, paymentDetection: v } })}
               />
-              <button
-                type="button"
-                className="text-button"
-                onClick={() => notificationService.requestListenerAccess()}
-                style={{ fontSize: 11.5, marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-              >
-                Configure Android Notification Access <ExternalLink size={12} />
-              </button>
+              <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <button
+                  type="button"
+                  className={listenerEnabled ? "text-button" : "button primary compact"}
+                  onClick={async () => {
+                    await notificationService.requestListenerAccess()
+                    setTimeout(() => notificationService.isListenerEnabled().then(setListenerEnabled), 1500)
+                  }}
+                  style={listenerEnabled ? { fontSize: 11.5, display: 'inline-flex', alignItems: 'center', gap: 4 } : { fontSize: 12, minHeight: 32, padding: '0 12px', width: 'fit-content' }}
+                >
+                  {listenerEnabled ? (
+                    <>
+                      <CheckCircle2 size={13} style={{ color: 'var(--success, #10b981)' }} />
+                      <span style={{ color: 'var(--muted)' }}>Android Notification Access: <strong>Enabled</strong></span>
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle size={14} /> Enable Android Notification Access
+                    </>
+                  )}
+                </button>
+                {!listenerEnabled && (
+                  <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--muted)', lineHeight: 1.4 }}>
+                    Note for Android 13+: If the toggle is greyed out in settings, go to Phone Settings → Apps → THOGAI → tap the 3 dots in the top right → tap "Allow restricted settings".
+                  </p>
+                )}
+              </div>
             </div>
           )}
           <ToggleRow title="Budget alerts" detail="When you approach or exceed a limit" on={data.settings.notifications.budget} set={v => setSettings({ notifications: { ...data.settings.notifications, budget: v } })} />
           <ToggleRow title="Due reminders" detail="Keep outstanding payments visible" on={data.settings.notifications.dues} set={v => setSettings({ notifications: { ...data.settings.notifications, dues: v } })} />
           <ToggleRow title="Monthly summaries" detail="A fresh financial recap" on={data.settings.notifications.summary} set={v => setSettings({ notifications: { ...data.settings.notifications, summary: v } })} />
-          <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
-            <button
-              type="button"
-              className="button ghost compact"
-              onClick={async () => {
-                await notificationService.postNotification(
-                  'THOGAI Custom Alert',
-                  'Your notifications are working perfectly on this device! 🚀',
-                  'system'
-                )
-                toast('Test notification sent')
-              }}
-              style={{ fontSize: 12 }}
-            >
-              <Sparkles size={14} /> Send test notification
-            </button>
-            {isNativePlatform() && (
-              <button
-                type="button"
-                className="button ghost compact"
-                onClick={async () => {
-                  await notificationService.scheduleTestDailyReminder(5)
-                  toast('Reminder scheduled for 5 seconds! Close the app now to test.')
-                }}
-                style={{ fontSize: 12 }}
-                title="Schedules daily reminder alarm in 5 seconds so you can close the app and verify the background alarm"
-              >
-                <Clock size={14} /> Test reminder in 5s (close app)
-              </button>
-            )}
-          </div>
         </div>
 
         <div className="mb-4 pt-3 border-t border-border-subtle">
