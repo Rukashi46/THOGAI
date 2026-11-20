@@ -193,20 +193,6 @@ public class ThogaiNotificationPlugin extends Plugin {
     }
 
     @PluginMethod
-    public void scheduleTestDailyReminder(PluginCall call) {
-        int seconds = call.getInt("seconds", 5);
-        try {
-            DailyReminderReceiver.scheduleTestAlarm(getContext(), seconds);
-            JSObject ret = new JSObject();
-            ret.put("success", true);
-            ret.put("seconds", seconds);
-            call.resolve(ret);
-        } catch (Exception e) {
-            call.reject("Failed to schedule test daily reminder", e);
-        }
-    }
-
-    @PluginMethod
     public void scheduleDailyReminder(PluginCall call) {
         boolean enabled = call.getBoolean("enabled", true);
         String timeStr = call.getString("time", "20:30");

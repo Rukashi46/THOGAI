@@ -11,12 +11,14 @@ import android.content.SharedPreferences;
 import android.os.Build;
 import android.util.Log;
 import androidx.core.app.NotificationCompat;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import java.util.Calendar;
 
 public class DailyReminderReceiver extends BroadcastReceiver {
     private static final String TAG = "THOGAI_DailyReminder";
-    private static final String CHANNEL_REMINDERS = "thogai_daily_reminders_v2";
+    private static final String CHANNEL_REMINDERS = "thogai_daily_reminders_v3";
     public static final String ACTION_DAILY = "com.thogai.app.DAILY_REMINDER";
 
     @Override
@@ -65,8 +67,8 @@ public class DailyReminderReceiver extends BroadcastReceiver {
         cal.set(Calendar.SECOND, 0);
         cal.set(Calendar.MILLISECOND, 0);
 
-        // If today's time has already passed or is within next 10 seconds, schedule for tomorrow
-        if (cal.getTimeInMillis() <= System.currentTimeMillis() + 10000) {
+        // If today's time has already passed or is within next 5 seconds, schedule for tomorrow
+        if (cal.getTimeInMillis() <= System.currentTimeMillis() + 5000) {
             cal.add(Calendar.DAY_OF_YEAR, 1);
         }
 
@@ -81,63 +83,47 @@ public class DailyReminderReceiver extends BroadcastReceiver {
         PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 1001, intent, flags);
 
         long triggerAt = cal.getTimeInMillis();
-        Log.i(TAG, "Scheduled next daily reminder at " + cal.getTime() + " (" + triggerAt + ")");
+        Log.i(TAG, "Scheduling exact daily reminder for: " + cal.getTime() + " (" + triggerAt + ")");
 
-        scheduleAlarmSafely(alarmManager, triggerAt, pendingIntent);
-    }
+        // 1. Primary mechanism: AlarmManager.setAlarmClock (highest priority in Android, immune to Doze and battery saving)
+        try {
+            Intent showIntent = new Intent(context, MainActivity.class);
+            int showFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                showFlags |= PendingIntent.FLAG_IMMUTABLE;
+            }
+            PendingIntent showPendingIntent = PendingIntent.getActivity(context, 1005, showIntent, showFlags);
 
-    public static void scheduleTestAlarm(Context context, int delaySeconds) {
-        AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
-        if (alarmManager == null) return;
-
-        Intent intent = new Intent(context, DailyReminderReceiver.class);
-        intent.setAction(ACTION_DAILY);
-        intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
-
-        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            flags |= PendingIntent.FLAG_IMMUTABLE;
+            AlarmManager.AlarmClockInfo info = new AlarmManager.AlarmClockInfo(triggerAt, showPendingIntent);
+            alarmManager.setAlarmClock(info, pendingIntent);
+            Log.i(TAG, "Successfully scheduled with setAlarmClock at " + cal.getTime());
+            return;
+        } catch (Exception e) {
+            Log.w(TAG, "setAlarmClock not permitted or failed, trying exact allow while idle: " + e.getMessage());
         }
-        PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 1003, intent, flags);
 
-        long triggerAt = System.currentTimeMillis() + (Math.max(delaySeconds, 1) * 1000L);
-        Log.i(TAG, "Scheduled test alarm for " + delaySeconds + " seconds in future at " + triggerAt);
-
-        scheduleAlarmSafely(alarmManager, triggerAt, pendingIntent);
-    }
-
-    private static void scheduleAlarmSafely(AlarmManager alarmManager, long triggerAt, PendingIntent pendingIntent) {
+        // 2. Fallback: setExactAndAllowWhileIdle if exact alarm permission granted
         boolean scheduled = false;
-
-        // Try exact alarm first if supported and permitted
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (alarmManager.canScheduleExactAlarms()) {
                 try {
                     alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent);
                     scheduled = true;
-                    Log.i(TAG, "Successfully scheduled with setExactAndAllowWhileIdle (Android 12+)");
-                } catch (SecurityException se) {
-                    Log.w(TAG, "Exact alarm permission missing or denied, falling back to setAndAllowWhileIdle: " + se.getMessage());
-                }
+                } catch (SecurityException ignored) {}
             }
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             try {
                 alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent);
                 scheduled = true;
-                Log.i(TAG, "Successfully scheduled with setExactAndAllowWhileIdle (Android 6-11)");
-            } catch (Exception e) {
-                Log.w(TAG, "setExactAndAllowWhileIdle failed: " + e.getMessage());
-            }
+            } catch (Exception ignored) {}
         }
 
-        // Safe fallback for all Android versions (does not throw SecurityException)
+        // 3. Last-resort fallback
         if (!scheduled) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent);
-                Log.i(TAG, "Successfully scheduled with setAndAllowWhileIdle fallback");
             } else {
                 alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent);
-                Log.i(TAG, "Successfully scheduled with standard set fallback");
             }
         }
     }
@@ -197,5 +183,28 @@ public class DailyReminderReceiver extends BroadcastReceiver {
 
         manager.notify(2001, builder.build());
         Log.i(TAG, "Daily notification displayed to user");
+
+        // Also add to in-app notification center
+        try {
+            SharedPreferences prefs = context.getSharedPreferences(PaymentNotificationListener.PREFS_NAME, Context.MODE_PRIVATE);
+            String existingJson = prefs.getString(PaymentNotificationListener.KEY_DETECTED, "[]");
+            JSONArray array = new JSONArray(existingJson);
+
+            JSONObject item = new JSONObject();
+            item.put("id", "daily_" + System.currentTimeMillis());
+            item.put("amount", 0);
+            item.put("merchant", "Daily Check-in");
+            item.put("rawText", "Daily check-in reminder to log expenses.");
+            item.put("sourceApp", context.getPackageName());
+            item.put("timestamp", System.currentTimeMillis());
+            item.put("read", false);
+
+            JSONArray updated = new JSONArray();
+            updated.put(item);
+            for (int i = 0; i < Math.min(array.length(), 29); i++) {
+                updated.put(array.get(i));
+            }
+            prefs.edit().putString(PaymentNotificationListener.KEY_DETECTED, updated.toString()).apply();
+        } catch (Exception ignored) {}
     }
 }

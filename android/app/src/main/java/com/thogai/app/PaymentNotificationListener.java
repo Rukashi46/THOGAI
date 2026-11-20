@@ -7,13 +7,13 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import android.util.Log;
 import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationManagerCompat;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -26,7 +26,7 @@ public class PaymentNotificationListener extends NotificationListenerService {
     private static final String TAG = "ThogaiPaymentDetector";
     public static final String PREFS_NAME = "thogai_notifications";
     public static final String KEY_DETECTED = "detected_payments";
-    public static final String CHANNEL_PAYMENTS = "thogai_payments_v2";
+    public static final String CHANNEL_PAYMENTS = "thogai_payments_v3";
 
     // Deduplication cache: hash -> timestamp
     private static final Set<String> recentHashes = new HashSet<>();
@@ -87,22 +87,22 @@ public class PaymentNotificationListener extends NotificationListenerService {
         PAYMENT_PACKAGES.add("com.truecaller");                        // Truecaller SMS
     }
 
-    // Regex for payment debits
+    // Comprehensive regex for debit and payment amounts (handles ₹4, Rs. 4, 4.00, INR 4, debited by 4.0, etc.)
     private static final Pattern AMOUNT_PATTERN = Pattern.compile(
         "(?:(?:Rs\\.?|INR|₹)\\s*([0-9,]+(?:\\.[0-9]{1,2})?))|" +
         "(?:([0-9,]+(?:\\.[0-9]{1,2})?)\\s*(?:INR|Rs\\.?|rupees|₹))|" +
-        "(?:(?:paid|debited|spent|sent|payment of|txn of)\\s+(?:for|by|with|of)?\\s*(?:Rs\\.?|INR|₹)?\\s*([0-9,]+(?:\\.[0-9]{1,2})?))",
+        "(?:(?:paid|pay|debit|debited|spent|sent|transfer|transferred|txn of|payment of)\\s+(?:for|by|with|of)?\\s*(?:Rs\\.?|INR|₹)?\\s*([0-9,]+(?:\\.[0-9]{1,2})?))",
         Pattern.CASE_INSENSITIVE
     );
 
+    // Matches any indication of outgoing debit/transfer
     private static final Pattern DEBIT_KEYWORDS = Pattern.compile(
-        "\\b(paid|debited|spent|sent|transferred|txn|transaction|payment|vpa|autopay|purchase|withdrawn|dr|cleared|remitted|deducted)\\b",
-        Pattern.CASE_INSENSITIVE
+        "(?i)\\b(paid|pay|debit|debited|spent|spend|sent|send|transfer|transferred|txn|transaction|payment|vpa|autopay|purchase|withdrawn|withdraw|dr|cleared|remitted|deducted)\\b"
     );
 
-    private static final Pattern OTP_EXCLUDE = Pattern.compile(
-        "\\b(otp|one time password|verification code|secret code|login code|do not share|don't share)\\b",
-        Pattern.CASE_INSENSITIVE
+    // Only matches genuine OTP verification messages, NEVER fraud warnings like "do not share"
+    private static final Pattern GENUINE_OTP_PATTERN = Pattern.compile(
+        "(?i)\\b(?:is your (?:one time password|otp|secret code|verification code)|use (?:this )?otp|otp is \\d{4,8}|your verification code is)\\b"
     );
 
     private static final Pattern MERCHANT_PATTERN = Pattern.compile(
@@ -113,7 +113,7 @@ public class PaymentNotificationListener extends NotificationListenerService {
     @Override
     public void onListenerConnected() {
         super.onListenerConnected();
-        Log.i(TAG, "NotificationListenerService connected and actively monitoring notifications.");
+        Log.i(TAG, "NotificationListenerService connected and actively listening.");
     }
 
     @Override
@@ -126,17 +126,17 @@ public class PaymentNotificationListener extends NotificationListenerService {
     }
 
     public static void rebindService(Context context) {
-        try {
-            ComponentName componentName = new ComponentName(context, PaymentNotificationListener.class);
-            PackageManager pm = context.getPackageManager();
-            pm.setComponentEnabledSetting(componentName, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP);
-            pm.setComponentEnabledSetting(componentName, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                requestRebind(componentName);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            try {
+                ComponentName componentName = new ComponentName(context, PaymentNotificationListener.class);
+                Set<String> packageNames = NotificationManagerCompat.getEnabledListenerPackages(context);
+                if (packageNames.contains(context.getPackageName())) {
+                    requestRebind(componentName);
+                    Log.i(TAG, "Explicitly called requestRebind for PaymentNotificationListener");
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "Could not request rebind: " + e.getMessage());
             }
-            Log.i(TAG, "Explicitly requested listener rebind");
-        } catch (Exception e) {
-            Log.w(TAG, "Could not rebind service: " + e.getMessage());
         }
     }
 
@@ -144,7 +144,7 @@ public class PaymentNotificationListener extends NotificationListenerService {
     public void onNotificationPosted(StatusBarNotification sbn) {
         if (sbn == null || sbn.getPackageName() == null) return;
 
-        // Skip THOGAI's own notifications to prevent loop
+        // Skip THOGAI's own notifications
         if (sbn.getPackageName().equals(getPackageName())) return;
 
         try {
@@ -153,7 +153,7 @@ public class PaymentNotificationListener extends NotificationListenerService {
             Bundle extras = notif.extras;
             if (extras == null) return;
 
-            // Extract comprehensive text from all possible notification extra fields
+            // Extract all text content
             StringBuilder sb = new StringBuilder();
 
             CharSequence titleCs = extras.getCharSequence(android.app.Notification.EXTRA_TITLE);
@@ -186,7 +186,9 @@ public class PaymentNotificationListener extends NotificationListenerService {
             String fullText = sb.toString().trim();
             if (fullText.isEmpty()) return;
 
-            // Check if from known financial app or has clear debit keywords
+            Log.d(TAG, "Evaluating incoming notification from: " + sbn.getPackageName() + " | Text: " + fullText);
+
+            // Check if from known financial app or has clear debit/payment keywords
             boolean isKnownPackage = PAYMENT_PACKAGES.contains(sbn.getPackageName());
             boolean hasDebitKeyword = DEBIT_KEYWORDS.matcher(fullText).find();
 
@@ -194,14 +196,16 @@ public class PaymentNotificationListener extends NotificationListenerService {
                 return;
             }
 
-            // Exclude OTPs
-            if (OTP_EXCLUDE.matcher(fullText).find()) {
+            // Exclude genuine OTP messages (never exclude debit SMS that have fraud warnings)
+            if (GENUINE_OTP_PATTERN.matcher(fullText).find()) {
+                Log.d(TAG, "Notification excluded as OTP verification");
                 return;
             }
 
-            // Check if amount is present
+            // Check for amount
             Matcher amountMatcher = AMOUNT_PATTERN.matcher(fullText);
             if (!amountMatcher.find()) {
+                Log.d(TAG, "No monetary amount matched in: " + fullText);
                 return;
             }
 
@@ -219,14 +223,14 @@ public class PaymentNotificationListener extends NotificationListenerService {
 
             if (amount <= 0) return;
 
-            // Extract merchant
+            // Extract merchant / recipient
             String merchant = "Payment";
             Matcher merchantMatcher = MERCHANT_PATTERN.matcher(fullText);
             if (merchantMatcher.find()) {
                 String found = merchantMatcher.group(1);
                 if (found != null && !found.trim().isEmpty()) {
                     merchant = found.trim();
-                    merchant = merchant.replaceAll("(?i)\\b(on|ref|upi|avl|bal|a/c|via)\\b.*$", "").trim();
+                    merchant = merchant.replaceAll("(?i)\\b(on|ref|upi|avl|bal|a/c|via|using|from)\\b.*$", "").trim();
                     if (merchant.length() > 25) merchant = merchant.substring(0, 25);
                 }
             } else if (titleCs != null && !titleCs.toString().trim().isEmpty()) {
@@ -240,20 +244,29 @@ public class PaymentNotificationListener extends NotificationListenerService {
                 }
             }
 
-            // Deduplicate
+            if (merchant.isEmpty() || merchant.equalsIgnoreCase("Payment")) {
+                if (fullText.toLowerCase().contains("self transfer") || fullText.toLowerCase().contains("self account")) {
+                    merchant = "Self Transfer";
+                }
+            }
+
+            // Deduplicate (same amount and merchant within 60s)
             String hash = amount + "_" + merchant + "_" + (System.currentTimeMillis() / 60000);
             synchronized (recentHashes) {
-                if (recentHashes.contains(hash)) return;
+                if (recentHashes.contains(hash)) {
+                    Log.d(TAG, "Skipping duplicate notification for hash: " + hash);
+                    return;
+                }
                 recentHashes.add(hash);
                 if (recentHashes.size() > 50) recentHashes.clear();
             }
 
-            Log.i(TAG, "Debit payment detected: ₹" + amount + " to " + merchant + " from package: " + sbn.getPackageName());
+            Log.i(TAG, ">>> SUCCESS: Payment detected! Amount: ₹" + amount + " to: " + merchant + " from package: " + sbn.getPackageName());
 
-            // Store in SharedPreferences
+            // Store in SharedPreferences for THOGAI in-app notification center
             saveDetectedPayment(amount, merchant, fullText, sbn.getPackageName());
 
-            // Post reminder notification
+            // Post reminder notification to Android system tray
             postReminderNotification(amount, merchant);
 
         } catch (Exception e) {
@@ -336,6 +349,6 @@ public class PaymentNotificationListener extends NotificationListenerService {
             .setContentIntent(pendingIntent);
 
         manager.notify((int) (System.currentTimeMillis() % 100000), builder.build());
-        Log.i(TAG, "Posted payment reminder notification to system tray");
+        Log.i(TAG, "Posted payment reminder notification to system tray for ₹" + formattedAmount);
     }
 }
