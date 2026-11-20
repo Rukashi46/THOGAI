@@ -20,9 +20,12 @@ interface Props {
   close: () => void
   onRecordRepayment: (d: {
     person: string; amount: number
-    splitId?: string; originatingTxId?: string
+    splitId?: string; originatingTxId?: string; account?: string
   }) => void
   onMarkAsMyExpense: (txId: string, splitId: string, amount: number) => void
+  onOpenRepaymentForm?: (d: {
+    person: string; amount: number; splitId?: string; originatingTxId?: string; account?: string
+  }) => void
 }
 
 type View = 'list' | 'person' | 'settle' | 'absorb'
@@ -49,7 +52,7 @@ function Ring({ pct }: { pct: number }) {
   )
 }
 
-export function MoneyOwedModal({ transactions, currency, close, onRecordRepayment, onMarkAsMyExpense }: Props) {
+export function MoneyOwedModal({ transactions, currency, close, onRecordRepayment, onMarkAsMyExpense, onOpenRepaymentForm }: Props) {
   const reduced = useReducedMotion()
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768
   const f = (n: number) => formatMoney(n, currency)
@@ -475,24 +478,64 @@ export function MoneyOwedModal({ transactions, currency, close, onRecordRepaymen
                     : `Records the entered amount as income from ${person.person}. The remaining balance stays outstanding.`}
                 </p>
 
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <motion.button type="button" whileTap={buttonTap} onClick={() => setView('person')}
-                    style={{ flex: 1, padding: '11px 18px', background: 'var(--surface-soft)',
-                      color: 'var(--text-2)', border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font)',
-                      fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
-                    Cancel
-                  </motion.button>
-                  <motion.button type="button" whileTap={primaryButtonTap} onClick={confirmSettle}
-                    disabled={mode === 'partial' && (!partialAmt || parseFloat(partialAmt) <= 0 || parseFloat(partialAmt) > item.remainingAmount)}
-                    style={{ flex: 2, padding: '11px 18px', background: 'var(--accent)', color: '#fff',
-                      border: 'none', borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font)',
-                      fontWeight: 600, fontSize: 14, cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                      opacity: (mode === 'partial' && (!partialAmt || parseFloat(partialAmt) <= 0 || parseFloat(partialAmt) > item.remainingAmount)) ? 0.4 : 1 }}>
-                    <CheckCircle2 size={15} />
-                    Record {mode === 'full' ? f(item.remainingAmount) : (partialAmt ? f(Math.min(parseFloat(partialAmt), item.remainingAmount)) : '')}
-                  </motion.button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <motion.button type="button" whileTap={buttonTap} onClick={() => setView('person')}
+                      style={{ flex: 1, padding: '11px 18px', background: 'var(--surface-soft)',
+                        color: 'var(--text-2)', border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font)',
+                        fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+                      Cancel
+                    </motion.button>
+                    <motion.button type="button" whileTap={primaryButtonTap} onClick={confirmSettle}
+                      disabled={mode === 'partial' && (!partialAmt || parseFloat(partialAmt) <= 0 || parseFloat(partialAmt) > item.remainingAmount)}
+                      style={{ flex: 2, padding: '11px 18px', background: 'var(--accent)', color: '#fff',
+                        border: 'none', borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font)',
+                        fontWeight: 600, fontSize: 14, cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                        opacity: (mode === 'partial' && (!partialAmt || parseFloat(partialAmt) <= 0 || parseFloat(partialAmt) > item.remainingAmount)) ? 0.4 : 1 }}>
+                      <CheckCircle2 size={15} />
+                      Record {mode === 'full' ? f(item.remainingAmount) : (partialAmt ? f(Math.min(parseFloat(partialAmt), item.remainingAmount)) : '')}
+                    </motion.button>
+                  </div>
+
+                  {onOpenRepaymentForm && (
+                    <motion.button
+                      type="button"
+                      whileTap={buttonTap}
+                      onClick={() => {
+                        const amt = mode === 'full'
+                          ? item.remainingAmount
+                          : Math.min(parseFloat(partialAmt) || 0, item.remainingAmount)
+                        if (amt > 0) {
+                          close()
+                          onOpenRepaymentForm({
+                            person: person.person,
+                            amount: amt,
+                            splitId: item.splitId,
+                            originatingTxId: item.txId
+                          })
+                        }
+                      }}
+                      style={{
+                        padding: '9px 12px',
+                        background: 'transparent',
+                        color: 'var(--accent)',
+                        border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)',
+                        borderRadius: 'var(--radius-sm)',
+                        fontFamily: 'var(--font)',
+                        fontWeight: 600,
+                        fontSize: 12.5,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6
+                      }}
+                    >
+                      Open in Transaction Form (Auto-filled) →
+                    </motion.button>
+                  )}
                 </div>
               </motion.div>
             )}

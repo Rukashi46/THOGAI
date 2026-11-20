@@ -201,31 +201,45 @@ class NotificationManager {
       let hasNew = false
 
       for (const p of payments) {
+        const rawId = String(p.id)
+        const finalId = rawId.startsWith('det_') ? rawId : ('det_' + rawId)
+
         // If user already dismissed or cleared this payment, purge from native and skip
-        if (dismissed.has(p.id) || dismissed.has('det_' + p.id)) {
+        if (dismissed.has(rawId) || dismissed.has(finalId)) {
           if (typeof plugin.clearDetectedPayment === 'function') {
-            plugin.clearDetectedPayment({ id: p.id }).catch(() => {})
+            plugin.clearDetectedPayment({ id: rawId }).catch(() => {})
           }
           continue
         }
 
-        const exists = currentList.some(
-          n => n.id === ('det_' + p.id) ||
-               n.data?.nativeId === p.id ||
+        const existing = currentList.find(
+          n => n.id === rawId ||
+               n.id === finalId ||
+               n.data?.nativeId === rawId ||
                (n.data?.amount === p.amount && Math.abs(n.timestamp - p.timestamp) < 60000)
         )
 
-        if (!exists) {
+        if (existing) {
+          // Reconcile read states bidirectionally
+          if (p.read && !existing.read) {
+            existing.read = true
+            hasNew = true
+          } else if (existing.read && !p.read) {
+            if (typeof plugin.markDetectedPaymentRead === 'function') {
+              plugin.markDetectedPaymentRead({ id: rawId }).catch(() => {})
+            }
+          }
+        } else {
           const formatted = Number(p.amount).toFixed(2).replace(/\.00$/, '')
           const item: ThogaiNotification = {
-            id: 'det_' + p.id,
+            id: finalId,
             title: `Payment Detected: ₹${formatted}`,
             body: `Paid to ${p.merchant}. Tap to categorize & record.`,
             type: 'payment_detected',
             timestamp: p.timestamp || Date.now(),
             read: !!p.read,
             data: {
-              nativeId: p.id,
+              nativeId: rawId,
               amount: p.amount,
               merchant: p.merchant,
               rawText: p.rawText

@@ -33,14 +33,32 @@ public class PaymentNotificationListener extends NotificationListenerService {
 
     // Known payment, banking and SMS app package names in India
     private static final Set<String> PAYMENT_PACKAGES = new HashSet<>();
+    // Social and non-financial apps that must NEVER trigger payment alerts
+    private static final Set<String> BLOCKED_PACKAGES = new HashSet<>();
+
     static {
+        // Blocklist: messaging/social apps where phrases like "Sent 2 photos" must never be parsed as payments
+        BLOCKED_PACKAGES.add("com.instagram.android");
+        BLOCKED_PACKAGES.add("com.facebook.katana");
+        BLOCKED_PACKAGES.add("com.facebook.orca");
+        BLOCKED_PACKAGES.add("com.facebook.lite");
+        BLOCKED_PACKAGES.add("org.telegram.messenger");
+        BLOCKED_PACKAGES.add("org.thunderdog.chatter");
+        BLOCKED_PACKAGES.add("com.snapchat.android");
+        BLOCKED_PACKAGES.add("com.twitter.android");
+        BLOCKED_PACKAGES.add("com.google.android.youtube");
+        BLOCKED_PACKAGES.add("com.discord");
+        BLOCKED_PACKAGES.add("com.reddit.frontpage");
+        BLOCKED_PACKAGES.add("com.linkedin.android");
+        BLOCKED_PACKAGES.add("com.spotify.music");
+        BLOCKED_PACKAGES.add("com.netflix.mediaclient");
+
         // UPI & Wallets
         PAYMENT_PACKAGES.add("com.google.android.apps.nbu.paisa.user"); // Google Pay
         PAYMENT_PACKAGES.add("com.phonepe.app");                        // PhonePe
         PAYMENT_PACKAGES.add("net.one97.paytm");                        // Paytm
         PAYMENT_PACKAGES.add("com.dreamplug.androidapp");               // CRED
         PAYMENT_PACKAGES.add("in.org.npci.upiapp");                     // BHIM
-        PAYMENT_PACKAGES.add("com.whatsapp");                          // WhatsApp Pay
         PAYMENT_PACKAGES.add("in.amazon.mShop.android.shopping");       // Amazon Pay
         PAYMENT_PACKAGES.add("com.amazon.mShop.android.shopping");
         PAYMENT_PACKAGES.add("com.mobikwik_new");                       // MobiKwik
@@ -87,17 +105,18 @@ public class PaymentNotificationListener extends NotificationListenerService {
         PAYMENT_PACKAGES.add("com.truecaller");                        // Truecaller SMS
     }
 
-    // Comprehensive regex for debit and payment amounts (handles ₹4, Rs. 4, 4.00, INR 4, debited by 4.0, etc.)
+    // STRICT regex: currency indicator (₹, Rs, INR, Rupees) is 100% MANDATORY!
+    // Never match bare numbers without currency (e.g. "Sent 2 photos" will NOT match).
     private static final Pattern AMOUNT_PATTERN = Pattern.compile(
         "(?:(?:Rs\\.?|INR|₹)\\s*([0-9,]+(?:\\.[0-9]{1,2})?))|" +
         "(?:([0-9,]+(?:\\.[0-9]{1,2})?)\\s*(?:INR|Rs\\.?|rupees|₹))|" +
-        "(?:(?:paid|pay|debit|debited|spent|sent|transfer|transferred|txn of|payment of)\\s+(?:for|by|with|of)?\\s*(?:Rs\\.?|INR|₹)?\\s*([0-9,]+(?:\\.[0-9]{1,2})?))",
+        "(?:(?:paid|pay|debit|debited|spent|sent|transfer|transferred|txn of|payment of)\\s+(?:for|by|with|of)?\\s*(?:Rs\\.?|INR|₹)\\s*([0-9,]+(?:\\.[0-9]{1,2})?))",
         Pattern.CASE_INSENSITIVE
     );
 
     // Matches any indication of outgoing debit/transfer
     private static final Pattern DEBIT_KEYWORDS = Pattern.compile(
-        "(?i)\\b(paid|pay|debit|debited|spent|spend|sent|send|transfer|transferred|txn|transaction|payment|vpa|autopay|purchase|withdrawn|withdraw|dr|cleared|remitted|deducted)\\b"
+        "(?i)\\b(paid|pay|debit|debited|spent|spend|sent|send|transfer|transferred|txn|transaction|payment|vpa|autopay|purchase|withdrawn|withdraw|dr|cleared|remitted|deducted|self\\s*transfer)\\b"
     );
 
     // Only matches genuine OTP verification messages, NEVER fraud warnings like "do not share"
@@ -186,15 +205,29 @@ public class PaymentNotificationListener extends NotificationListenerService {
             String fullText = sb.toString().trim();
             if (fullText.isEmpty()) return;
 
-            Log.d(TAG, "Evaluating incoming notification from: " + sbn.getPackageName() + " | Text: " + fullText);
-
-            // Check if from known financial app or has clear debit/payment keywords
-            boolean isKnownPackage = PAYMENT_PACKAGES.contains(sbn.getPackageName());
-            boolean hasDebitKeyword = DEBIT_KEYWORDS.matcher(fullText).find();
-
-            if (!isKnownPackage && !hasDebitKeyword) {
+            String pkg = sbn.getPackageName();
+            if (BLOCKED_PACKAGES.contains(pkg)) {
                 return;
             }
+
+            // Must be a known payment app or match banking/SMS package identifier
+            boolean isKnownPackage = PAYMENT_PACKAGES.contains(pkg);
+            String pkgLower = pkg.toLowerCase();
+            boolean isFinancialPackage = isKnownPackage ||
+                pkgLower.contains(".sms") || pkgLower.contains(".mms") || pkgLower.contains(".messaging") ||
+                pkgLower.contains("bank") || pkgLower.contains("upi") || pkgLower.contains("wallet") ||
+                pkgLower.contains("finance");
+
+            if (!isFinancialPackage) {
+                return; // strictly ignore social, chat, gaming and media apps
+            }
+
+            boolean hasDebitKeyword = DEBIT_KEYWORDS.matcher(fullText).find();
+            if (!hasDebitKeyword) {
+                return;
+            }
+
+            Log.d(TAG, "Evaluating incoming notification from: " + pkg + " | Text: " + fullText);
 
             // Exclude genuine OTP messages (never exclude debit SMS that have fraud warnings)
             if (GENUINE_OTP_PATTERN.matcher(fullText).find()) {

@@ -336,8 +336,27 @@ function SyncPill({ state, onClick, lastSynced }: { state: SyncState; onClick: (
   )
 }
 
+function sanitizeTransactions(txs: Transaction[]): Transaction[] {
+  const seen = new Set<string>()
+  const clean: Transaction[] = []
+  for (const t of txs) {
+    const id = (t.id && t.id.trim().length > 0) ? t.id.trim() : newId()
+    const splitKey = Array.isArray(t.splits) ? JSON.stringify(t.splits.map(s => ({ p: s.person, a: s.amount }))) : ''
+    const fingerprint = `${t.date}|${t.type}|${t.amount}|${t.description}|${t.notes || ''}|${splitKey}`
+    if (seen.has(fingerprint)) {
+      continue
+    }
+    seen.add(fingerprint)
+    clean.push(t.id === id ? t : { ...t, id })
+  }
+  return clean
+}
+
 function App() {
-  const [data, setData] = useState<FinanceData>(() => storage.read())
+  const [data, setData] = useState<FinanceData>(() => {
+    const raw = storage.read()
+    return { ...raw, transactions: sanitizeTransactions(raw.transactions) }
+  })
   const [page, setPage] = useState<Page>('home')
   const [pageDirection, setPageDirection] = useState<number>(1)
   const [modal, setModal] = useState<ModalState>(null)
@@ -401,7 +420,7 @@ function App() {
       if (lp && lp.amount) {
         const now = new Date().toISOString()
         open('expense', undefined, {
-          id: '',
+          id: newId(),
           date: now.slice(0, 10),
           category: data.settings.defaultCategory || 'Food & Dining',
           amount: lp.amount,
@@ -642,14 +661,20 @@ function App() {
     const updated = { ...tx, splits: updatedSplits, updatedAt: new Date().toISOString() }
     const next = { ...data, transactions: data.transactions.map(t => t.id === txId ? updated : t) }
     save(next)
+    cloudSync.syncTransaction('UPDATE', updated, currentUser)
     setToast(`Marked ${formatMoney(amountToConvert, data.settings.currency)} as personal expense`)
   }
 
   // Record repayment income inline without opening transaction form
   const inlineRecordRepayment = (details: {
-    person: string; amount: number; splitId?: string; originatingTxId?: string
+    person: string; amount: number; splitId?: string; originatingTxId?: string; account?: string
   }) => {
     const now = new Date().toISOString()
+    const targetAccount = details.account ||
+      (details.originatingTxId ? data.transactions.find(t => t.id === details.originatingTxId)?.account : undefined) ||
+      data.settings.defaultAccount ||
+      'Cash'
+
     const repaymentTx: Transaction = {
       id: newId(),
       type: 'income',
@@ -657,7 +682,7 @@ function App() {
       amount: details.amount,
       description: `Repayment from ${details.person}`,
       date: now.slice(0, 10),
-      account: data.settings.defaultAccount || 'Cash',
+      account: targetAccount,
       notes: '',
       recurring: false,
       createdAt: now,
@@ -669,6 +694,48 @@ function App() {
     cloudSync.syncTransaction('CREATE', repaymentTx, currentUser)
     setToast(`${formatMoney(details.amount, data.settings.currency)} from ${details.person} recorded`)
   }
+
+  // Open repayment in full transaction form with auto-fill
+  const openRepaymentForm = (details: {
+    person: string; amount: number; splitId?: string; originatingTxId?: string; account?: string
+  }) => {
+    const now = new Date().toISOString()
+    const targetAccount = details.account ||
+      (details.originatingTxId ? data.transactions.find(t => t.id === details.originatingTxId)?.account : undefined) ||
+      data.settings.defaultAccount ||
+      'Cash'
+
+    setModal({
+      mode: 'transaction',
+      type: 'income',
+      category: 'Friend Repayment',
+      repaymentFor: {
+        person: details.person,
+        amount: details.amount,
+        splitId: details.splitId,
+        originatingTxId: details.originatingTxId
+      },
+      draft: {
+        id: newId(),
+        type: 'income',
+        category: 'Friend Repayment',
+        amount: details.amount,
+        description: `Repayment from ${details.person}`,
+        date: now.slice(0, 10),
+        account: targetAccount,
+        notes: '',
+        recurring: false,
+        createdAt: now,
+        updatedAt: now,
+        repaymentFor: {
+          person: details.person,
+          splitId: details.splitId,
+          originatingTxId: details.originatingTxId
+        }
+      }
+    })
+  }
+
   const lockApp = () => {
     sessionStorage.removeItem('thogai_unlocked')
     setIsLocked(true)
@@ -677,22 +744,24 @@ function App() {
 
   const saveTransaction = (tx: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>, id?: string) => {
     const now = new Date().toISOString()
-    const isNew = !id
+    const cleanId = (typeof id === 'string' && id.trim().length > 0) ? id.trim() : undefined
+    const isNew = !cleanId
+    const targetId = cleanId ?? newId()
     const transaction: Transaction = {
       ...tx,
-      id: id ?? newId(),
-      createdAt: id ? data.transactions.find((x) => x.id === id)?.createdAt ?? now : now,
+      id: targetId,
+      createdAt: cleanId ? data.transactions.find((x) => x.id === cleanId)?.createdAt ?? now : now,
       updatedAt: now
     }
-    const nextTransactions = id
-      ? data.transactions.map((t) => (t.id === id ? transaction : t))
+    const nextTransactions = cleanId
+      ? data.transactions.map((t) => (t.id === cleanId ? transaction : t))
       : [transaction, ...data.transactions]
 
     const next = { ...data, transactions: nextTransactions }
     save(next)
     cloudSync.syncTransaction(isNew ? 'CREATE' : 'UPDATE', transaction, currentUser)
     setModal(null)
-    setToast(id ? 'Transaction updated' : 'Transaction added')
+    setToast(cleanId ? 'Transaction updated' : 'Transaction added')
   }
 
 
@@ -1152,6 +1221,7 @@ function App() {
             close={() => setModal(null)}
             onRecordRepayment={inlineRecordRepayment}
             onMarkAsMyExpense={markAsMyExpense}
+            onOpenRepaymentForm={openRepaymentForm}
           />
         )}
         {showNotifications && (
@@ -1163,7 +1233,7 @@ function App() {
             onRecordPayment={(p) => {
               const now = new Date().toISOString()
               open('expense', undefined, {
-                id: '',
+                id: newId(),
                 date: now.slice(0, 10),
                 category: data.settings.defaultCategory || 'Food & Dining',
                 amount: p.amount,
@@ -2946,7 +3016,11 @@ function TransactionModal({
       if (!repPerson.trim()) return setError('Please specify who made the repayment.')
       submit({
         ...form, amount,
-        repaymentFor: { person: repPerson.trim() }
+        repaymentFor: {
+          person: repPerson.trim(),
+          splitId: repaymentFor?.splitId,
+          originatingTxId: repaymentFor?.originatingTxId
+        }
       } as any, initial?.id)
       return
     }

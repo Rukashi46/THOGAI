@@ -67,8 +67,8 @@ public class DailyReminderReceiver extends BroadcastReceiver {
         cal.set(Calendar.SECOND, 0);
         cal.set(Calendar.MILLISECOND, 0);
 
-        // If today's time has already passed or is within next 5 seconds, schedule for tomorrow
-        if (cal.getTimeInMillis() <= System.currentTimeMillis() + 5000) {
+        // If today's time has already passed (more than 10 seconds ago), schedule for tomorrow
+        if (cal.getTimeInMillis() <= System.currentTimeMillis() - 10000) {
             cal.add(Calendar.DAY_OF_YEAR, 1);
         }
 
