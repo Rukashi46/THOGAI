@@ -25,6 +25,16 @@ export interface FinancialContext {
   }
 }
 
+export interface ParsedTransactionAi {
+  amount?: number
+  description?: string
+  category?: string
+  account?: string
+  type?: 'expense' | 'income' | 'due'
+  date?: string
+  notes?: string
+}
+
 export interface ConversationTurn {
   role: 'user' | 'model'
   text: string
@@ -214,7 +224,33 @@ export function generateLocalAiResponse(prompt: string, ctx: FinancialContext): 
     return out
   }
 
-  // 3. Savings Goal Simulation
+  // 3. Predictive Cash Flow & Burn Rate Analysis
+  if (lower.includes('burn') || lower.includes('forecast') || lower.includes('velocity') || lower.includes('project') || lower.includes('runway')) {
+    const now = new Date()
+    const day = now.getDate()
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+    const daysRemaining = Math.max(1, daysInMonth - day)
+    const dailyVelocity = day > 0 ? Math.round(ctx.expenses / day) : 0
+    const projectedSpend = Math.round(ctx.expenses + (dailyVelocity * daysRemaining))
+    const budgetCeiling = ctx.budget > 0 ? ctx.budget : (ctx.income > 0 ? ctx.income : 0)
+
+    let out = `### ⚡ Cash Flow & Burn Rate Forecast\n\n`
+    out += `• **Current Velocity**: Spending **${f(dailyVelocity)}/day** on average (${day} of ${daysInMonth} days elapsed).\n`
+    out += `• **Projected Month-End Outflow**: **${f(projectedSpend)}**\n`
+    if (budgetCeiling > 0) {
+      const diff = budgetCeiling - projectedSpend
+      if (diff >= 0) {
+        out += `• **Surplus Outlook**: ✅ On track to retain **${f(diff)}** by month-end.\n`
+        out += `• **Recommended Daily Cap**: To preserve this cushion, keep daily spending below **${f(Math.round((budgetCeiling - ctx.expenses) / daysRemaining))}/day** for the remaining ${daysRemaining} days.\n`
+      } else {
+        out += `• **Deficit Risk**: ⚠️ At this pace, you will exceed your ceiling by **${f(Math.abs(diff))}**.\n`
+        out += `• **Adjustment Target**: Restrict discretionary outlays to **${f(Math.max(0, Math.round((budgetCeiling - ctx.expenses) / daysRemaining)))}/day** over the next ${daysRemaining} days to break even.\n`
+      }
+    }
+    return out
+  }
+
+  // 4. Savings Goal Simulation
   if (lower.includes('goal') || lower.includes('simulate') || lower.includes('save 1') || lower.includes('1,00,000') || lower.includes('100000')) {
     const targetAmount = 100000
     const months = 12
@@ -285,13 +321,16 @@ async function callDirectGemini(
 
   if (!apiKey) return null
 
-  const preferredModel = (import.meta.env.VITE_GEMINI_MODEL || 'gemini-2.5-flash').trim()
+  const preferredModel = (import.meta.env.VITE_GEMINI_MODEL || 'gemini-3.5-flash-lite').trim()
   const candidateModels = Array.from(new Set([
     preferredModel,
+    'gemini-3.5-flash-lite',
+    'gemini-3.8-flash',
+    'gemini-3.5-flash',
+    'gemini-2.5-flash-lite',
     'gemini-2.5-flash',
     'gemini-2.0-flash',
-    'gemini-1.5-flash',
-    'gemini-1.5-flash-latest'
+    'gemini-1.5-flash'
   ]))
 
   const ctxString = JSON.stringify(financialContext, null, 2)
@@ -419,5 +458,243 @@ export async function queryAiAdvisor(
   return {
     text: localFallback || 'Unable to get advice right now. Please try again.',
     isOffline: true
+  }
+}
+
+/**
+ * Parses user natural language statement (e.g. "Paid 350 for dinner at Sri Ayyappa using Indian Bank")
+ * or speech input into structured transaction fields.
+ * Uses live Gemini when available and falls back to deterministic regex parser offline.
+ */
+export async function parseNaturalLanguageExpense(
+  prompt: string,
+  categories: string[],
+  accounts: string[]
+): Promise<ParsedTransactionAi> {
+  const clean = prompt.trim()
+  if (!clean) return {}
+
+  const apiKey = (import.meta.env.VITE_GEMINI_API_KEY || '').trim()
+  const preferredModel = (import.meta.env.VITE_GEMINI_MODEL || 'gemini-3.5-flash-lite').trim()
+  const candidateModels = Array.from(new Set([
+    preferredModel,
+    'gemini-3.5-flash-lite',
+    'gemini-3.8-flash',
+    'gemini-3.5-flash',
+    'gemini-2.5-flash-lite',
+    'gemini-2.0-flash'
+  ]))
+
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const systemInstruction = `You are a financial parsing assistant. The user enters a natural language expense or income statement.
+Extract and return STRICT JSON with these keys:
+- amount: (number > 0)
+- description: (short clean merchant/purpose, e.g. "Sri Ayyappa Restaurant", "Petrol at Indian Oil", "Salary")
+- category: (choose closest from: ${JSON.stringify(categories)})
+- account: (choose closest from: ${JSON.stringify(accounts)})
+- type: ("expense" | "income" | "due", default "expense")
+- date: (YYYY-MM-DD, today is ${todayStr})
+- notes: (optional brief notes)
+
+Output ONLY valid JSON.`
+
+  if (apiKey && typeof navigator !== 'undefined' && navigator.onLine) {
+    for (const model of candidateModels) {
+      try {
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${apiKey}`
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: systemInstruction }] },
+            contents: [{ role: 'user', parts: [{ text: clean }] }],
+            generationConfig: { responseMimeType: 'application/json' }
+          })
+        })
+        if (res.ok) {
+          const data = await res.json()
+          const text = data?.candidates?.[0]?.content?.parts?.[0]?.text
+          if (text) {
+            const parsed = JSON.parse(text)
+            return {
+              amount: typeof parsed.amount === 'number' && parsed.amount > 0 ? parsed.amount : undefined,
+              description: parsed.description ? String(parsed.description) : undefined,
+              category: categories.find(c => c.toLowerCase() === String(parsed.category || '').toLowerCase()) || parsed.category,
+              account: accounts.find(a => a.toLowerCase() === String(parsed.account || '').toLowerCase()) || parsed.account,
+              type: parsed.type === 'income' || parsed.type === 'due' ? parsed.type : 'expense',
+              date: parsed.date || todayStr,
+              notes: parsed.notes
+            }
+          }
+        }
+      } catch {
+        // try next candidate model
+      }
+    }
+  }
+
+  // Deterministic local regex fallback (works 100% offline)
+  return fallbackParseNaturalLanguage(clean, categories, accounts, todayStr)
+}
+
+/**
+ * Parses receipt/bill/payment confirmation image using Gemini Vision Multimodal OCR.
+ */
+export async function parseReceiptImage(
+  base64Data: string,
+  mimeType: string,
+  categories: string[],
+  accounts: string[]
+): Promise<ParsedTransactionAi> {
+  const apiKey = (import.meta.env.VITE_GEMINI_API_KEY || '').trim()
+  if (!apiKey) {
+    throw new Error('Gemini API key is required for receipt scanning.')
+  }
+
+  const preferredModel = (import.meta.env.VITE_GEMINI_MODEL || 'gemini-3.5-flash-lite').trim()
+  const candidateModels = Array.from(new Set([
+    preferredModel,
+    'gemini-3.5-flash-lite',
+    'gemini-3.8-flash',
+    'gemini-3.5-flash',
+    'gemini-2.5-flash-lite',
+    'gemini-2.0-flash'
+  ]))
+
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const cleanBase64 = base64Data.includes('base64,') ? base64Data.split('base64,')[1] : base64Data
+
+  const systemInstruction = `You are a financial receipt and bill OCR assistant.
+Analyze this image of a receipt, invoice, bill, or payment confirmation screen.
+Extract and return STRICT JSON with these keys:
+- amount: (number, the total paid or due amount)
+- description: (clean merchant name or store name)
+- category: (choose closest from: ${JSON.stringify(categories)})
+- account: (choose closest from: ${JSON.stringify(accounts)})
+- type: ("expense" | "income")
+- date: (YYYY-MM-DD if found on receipt, otherwise default to "${todayStr}")
+- notes: (summary of itemized purchases or bill reference)
+
+Output ONLY valid JSON.`
+
+  for (const model of candidateModels) {
+    try {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${apiKey}`
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemInstruction }] },
+          contents: [{
+            parts: [
+              { text: 'Extract receipt financial data' },
+              { inlineData: { mimeType, data: cleanBase64 } }
+            ]
+          }],
+          generationConfig: { responseMimeType: 'application/json' }
+        })
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text
+        if (text) {
+          const parsed = JSON.parse(text)
+          return {
+            amount: typeof parsed.amount === 'number' && parsed.amount > 0 ? parsed.amount : undefined,
+            description: parsed.description ? String(parsed.description) : undefined,
+            category: categories.find(c => c.toLowerCase() === String(parsed.category || '').toLowerCase()) || parsed.category,
+            account: accounts.find(a => a.toLowerCase() === String(parsed.account || '').toLowerCase()) || parsed.account,
+            type: parsed.type === 'income' ? 'income' : 'expense',
+            date: parsed.date || todayStr,
+            notes: parsed.notes
+          }
+        }
+      }
+    } catch {
+      // try next candidate
+    }
+  }
+
+  throw new Error('Could not parse receipt image. Please enter details manually.')
+}
+
+/**
+ * Deterministic offline rule-based natural language parser.
+ */
+function fallbackParseNaturalLanguage(
+  text: string,
+  categories: string[],
+  accounts: string[],
+  todayStr: string
+): ParsedTransactionAi {
+  const lower = text.toLowerCase()
+
+  // 1. Amount detection
+  let amount: number | undefined
+  const amtMatch = text.match(/(?:(?:rs\.?|inr|₹)\s*([\d,]+(?:\.\d+)?))|([\d,]+(?:\.\d+)?)\s*(?:rs\.?|inr|₹)?/i)
+  if (amtMatch) {
+    const rawNum = amtMatch[1] || amtMatch[2]
+    const parsedNum = parseFloat(rawNum.replace(/,/g, ''))
+    if (!isNaN(parsedNum) && parsedNum > 0) {
+      amount = parsedNum
+    }
+  }
+
+  // 2. Type detection
+  let type: 'expense' | 'income' | 'due' = 'expense'
+  if (lower.includes('received') || lower.includes('salary') || lower.includes('earned') || lower.includes('credited')) {
+    type = 'income'
+  } else if (lower.includes('due') || lower.includes('borrowed') || lower.includes('loan')) {
+    type = 'due'
+  }
+
+  // 3. Category matching
+  let category: string | undefined
+  for (const cat of categories) {
+    if (lower.includes(cat.toLowerCase())) {
+      category = cat
+      break
+    }
+  }
+  if (!category) {
+    if (lower.includes('dinner') || lower.includes('lunch') || lower.includes('breakfast') || lower.includes('food') || lower.includes('coffee') || lower.includes('restaurant') || lower.includes('hotel') || lower.includes('swiggy') || lower.includes('zomato')) {
+      category = categories.find(c => /food|dining|snack/i.test(c)) || 'Food & Dining'
+    } else if (lower.includes('petrol') || lower.includes('diesel') || lower.includes('fuel')) {
+      category = categories.find(c => /fuel|vehicle/i.test(c)) || 'Vehicle & Fuel'
+    } else if (lower.includes('grocer') || lower.includes('milk') || lower.includes('veg') || lower.includes('supermarket')) {
+      category = categories.find(c => /grocer/i.test(c)) || 'Groceries'
+    } else if (lower.includes('cab') || lower.includes('uber') || lower.includes('ola') || lower.includes('auto') || lower.includes('bus') || lower.includes('metro') || lower.includes('train')) {
+      category = categories.find(c => /transport/i.test(c)) || 'Transportation'
+    }
+  }
+
+  // 4. Account matching
+  let account: string | undefined
+  for (const acc of accounts) {
+    if (lower.includes(acc.toLowerCase())) {
+      account = acc
+      break
+    }
+  }
+
+  // 5. Clean description
+  let description = text
+    .replace(/(?:(?:rs\.?|inr|₹)\s*[\d,]+(?:\.\d+)?)|(?:[\d,]+(?:\.\d+)?\s*(?:rs\.?|inr|₹)?)/gi, '')
+    .replace(/\b(paid|spent|bought|for|using|with|via|from|at|in|today|yesterday|on)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  if (!description) {
+    description = category || (type === 'income' ? 'Income' : 'Expense')
+  }
+
+  return {
+    amount,
+    description: description.charAt(0).toUpperCase() + description.slice(1),
+    category,
+    account,
+    type,
+    date: todayStr
   }
 }

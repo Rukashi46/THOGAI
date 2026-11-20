@@ -10,7 +10,8 @@ import {
   HeartPulse, GraduationCap, Film, Plane, Users, Repeat, Smile, Cookie, Receipt, Briefcase,
   Laptop, Building2, Coins, Award, Gift, Handshake, PiggyBank, CreditCard,
   FileText, Upload, CheckCircle2, AlertCircle, MinusCircle, FileSpreadsheet,
-  Scale, History, ArrowRight, ArrowLeft, ChevronLeft, ExternalLink, Clock
+  Scale, History, ArrowRight, ArrowLeft, ChevronLeft, ExternalLink, Clock,
+  Camera, Mic, MicOff, Wand2
 } from 'lucide-react'
 import { categorySpend, currencies, formatMoney, groupByDate, groupByMonth, labelDate, monthKey, newId, seedBudgets, snapshot, budgetState, getAccountBalances, getTotalStartingBalance } from './lib/finance'
 import {
@@ -22,7 +23,11 @@ import {
   type Transaction, type TransactionType
 } from './services/storage'
 import { security } from './services/security'
-import { buildFinancialContext, generateLocalAiResponse, queryAiAdvisor, type FinancialContext, type ConversationTurn } from './services/ai'
+import {
+  buildFinancialContext, generateLocalAiResponse, queryAiAdvisor,
+  parseNaturalLanguageExpense, parseReceiptImage,
+  type FinancialContext, type ConversationTurn, type ParsedTransactionAi
+} from './services/ai'
 import { SafeMarkdown } from './lib/markdown'
 import { ThemedSelect } from './components/ThemedSelect'
 import { ThemedDatePicker } from './components/ThemedDatePicker'
@@ -2968,6 +2973,158 @@ function TransactionModal({
 
   const [error, setError] = useState('')
 
+  // AI Assist State
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [aiScanning, setAiScanning] = useState(false)
+  const [aiNotice, setAiNotice] = useState('')
+  const [isListening, setIsListening] = useState(false)
+  const receiptInputRef = useRef<HTMLInputElement>(null)
+  const speechRecognitionRef = useRef<any>(null)
+
+  const hasSpeechSupport = typeof window !== 'undefined' && Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
+
+  const applyParsedData = (data: ParsedTransactionAi, sourceLabel: string) => {
+    setForm(prev => {
+      const nextType = data.type || prev.type
+      const available = nextType === 'income' ? incomeCats : expenseCats
+      let matchedCat = prev.category
+      if (data.category) {
+        matchedCat = available.find(c => c.toLowerCase() === data.category!.toLowerCase()) ||
+          available.find(c => c.toLowerCase().includes(data.category!.toLowerCase())) ||
+          data.category
+      }
+      let matchedAcc = prev.account
+      if (data.account) {
+        matchedAcc = accounts.find(a => a.toLowerCase() === data.account!.toLowerCase()) ||
+          accounts.find(a => a.toLowerCase().includes(data.account!.toLowerCase())) ||
+          data.account
+      }
+      return {
+        ...prev,
+        type: nextType,
+        amount: data.amount ? String(data.amount) : prev.amount,
+        description: data.description || prev.description,
+        category: matchedCat,
+        account: matchedAcc,
+        date: data.date || prev.date,
+        notes: data.notes ? (prev.notes ? `${prev.notes}\n${data.notes}` : data.notes) : prev.notes
+      }
+    })
+    setAiNotice(`✨ Auto-filled from ${sourceLabel}!`)
+    setTimeout(() => setAiNotice(''), 4500)
+  }
+
+  const handleAiNaturalLanguageFill = async () => {
+    if (!aiPrompt.trim() || aiScanning) return
+    setAiScanning(true)
+    setAiNotice('AI analyzing statement...')
+    try {
+      const parsed = await parseNaturalLanguageExpense(aiPrompt, currentCats, accounts)
+      applyParsedData(parsed, 'statement')
+      setAiPrompt('')
+    } catch {
+      setAiNotice('Could not parse statement. Please enter manually.')
+      setTimeout(() => setAiNotice(''), 4000)
+    } finally {
+      setAiScanning(false)
+    }
+  }
+
+  const toggleSpeechRecognition = () => {
+    if (!hasSpeechSupport) return
+    if (isListening) {
+      speechRecognitionRef.current?.stop?.()
+      setIsListening(false)
+      return
+    }
+    try {
+      const SpeechClass = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+      const rec = new SpeechClass()
+      rec.continuous = false
+      rec.interimResults = false
+      rec.lang = 'en-IN'
+      rec.onstart = () => setIsListening(true)
+      rec.onresult = (evt: any) => {
+        const transcript = evt?.results?.[0]?.[0]?.transcript
+        if (transcript) {
+          setAiPrompt(transcript)
+          setIsListening(false)
+          setAiScanning(true)
+          setAiNotice('AI analyzing voice...')
+          parseNaturalLanguageExpense(transcript, currentCats, accounts)
+            .then(parsed => applyParsedData(parsed, 'voice'))
+            .catch(() => setAiNotice('Could not parse voice statement.'))
+            .finally(() => setAiScanning(false))
+        }
+      }
+      rec.onerror = () => setIsListening(false)
+      rec.onend = () => setIsListening(false)
+      speechRecognitionRef.current = rec
+      rec.start()
+    } catch {
+      setIsListening(false)
+    }
+  }
+
+  const handleReceiptUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setAiScanning(true)
+    setAiNotice('Analyzing receipt with Gemini Vision...')
+    try {
+      const reader = new FileReader()
+      reader.onload = async (ev) => {
+        const rawDataUrl = ev.target?.result as string
+        if (!rawDataUrl) {
+          setAiScanning(false)
+          setAiNotice('Failed to read image.')
+          return
+        }
+
+        const img = new Image()
+        img.src = rawDataUrl
+        img.onload = async () => {
+          try {
+            const canvas = document.createElement('canvas')
+            const maxDim = 1200
+            let { width, height } = img
+            if (width > maxDim || height > maxDim) {
+              if (width > height) {
+                height = Math.round((height * maxDim) / width)
+                width = maxDim
+              } else {
+                width = Math.round((width * maxDim) / height)
+                height = maxDim
+              }
+            }
+            canvas.width = width
+            canvas.height = height
+            const ctx2d = canvas.getContext('2d')
+            ctx2d?.drawImage(img, 0, 0, width, height)
+            const compressed = canvas.toDataURL('image/jpeg', 0.85)
+
+            const parsed = await parseReceiptImage(compressed, 'image/jpeg', currentCats, accounts)
+            applyParsedData(parsed, 'receipt')
+          } catch (err: any) {
+            setAiNotice(err?.message || 'Could not parse receipt. Please enter manually.')
+            setTimeout(() => setAiNotice(''), 4500)
+          } finally {
+            setAiScanning(false)
+            if (receiptInputRef.current) receiptInputRef.current.value = ''
+          }
+        }
+        img.onerror = () => {
+          setAiScanning(false)
+          setAiNotice('Unable to load image file.')
+        }
+      }
+      reader.readAsDataURL(file)
+    } catch {
+      setAiScanning(false)
+      setAiNotice('Error reading file.')
+    }
+  }
+
   // knownPeople from existing split transactions + notes
   const knownPeople = useMemo(() => {
     const names = new Set<string>()
@@ -3069,6 +3226,69 @@ function TransactionModal({
             {t}
           </motion.button>
         ))}
+      </div>
+
+      {/* AI Smart Fill & Receipt Scanner */}
+      <div className="ai-assist-box">
+        <div className="ai-assist-header">
+          <div className="ai-assist-title">
+            <Sparkles size={13} />
+            <span>AI Smart Fill</span>
+          </div>
+          <div className="ai-assist-actions">
+            <input
+              type="file"
+              ref={receiptInputRef}
+              accept="image/*"
+              capture="environment"
+              style={{ display: 'none' }}
+              onChange={handleReceiptUpload}
+            />
+            <button
+              type="button"
+              className="ai-assist-btn"
+              onClick={() => receiptInputRef.current?.click()}
+              disabled={aiScanning}
+              title="Scan receipt with Gemini Vision"
+            >
+              <Camera size={13} />
+              <span>Scan Receipt</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="ai-assist-input-row">
+          <div className="ai-assist-input-wrap">
+            <input
+              type="text"
+              placeholder='e.g. "Dinner 350 Sri Ayyappa with Indian Bank"'
+              value={aiPrompt}
+              onChange={e => setAiPrompt(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAiNaturalLanguageFill(); } }}
+              disabled={aiScanning}
+            />
+            {hasSpeechSupport && (
+              <button
+                type="button"
+                className={`ai-mic-btn ${isListening ? 'listening' : ''}`}
+                onClick={toggleSpeechRecognition}
+                title={isListening ? 'Listening...' : 'Voice input'}
+              >
+                {isListening ? <MicOff size={13} /> : <Mic size={13} />}
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            className="button compact primary ai-fill-btn"
+            onClick={handleAiNaturalLanguageFill}
+            disabled={aiScanning || !aiPrompt.trim()}
+          >
+            {aiScanning ? <Sparkles size={13} className="spin" /> : <Wand2 size={13} />}
+            <span>{aiScanning ? 'Filling...' : 'Fill'}</span>
+          </button>
+        </div>
+        {aiNotice && <p className="ai-assist-notice">{aiNotice}</p>}
       </div>
 
       <label className="amount-field">
@@ -3743,8 +3963,10 @@ function AiModal({ data, close }: { data: FinanceData; close: () => void }) {
     }
   };
   const quickActions = [
+    { label: "Today's Spending", prompt: 'What is my spending today?' },
+    { label: 'Burn Rate & Forecast', prompt: 'Analyze my burn rate and forecast end of month' },
     { label: '50/30/20 Budget', prompt: 'Generate 50/30/20 Budget' },
-    { label: 'Spending Analysis', prompt: 'Analyze Spending Trends' },
+    { label: 'Spending Trends', prompt: 'Analyze Spending Trends' },
     { label: 'Savings Goal', prompt: 'Simulate Savings Goal' },
     { label: 'Debt Strategy', prompt: 'Debt Payoff Strategy' }
   ];

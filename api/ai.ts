@@ -12,7 +12,7 @@ export async function handleAiRequest(
   envModel?: string
 ): Promise<{ status: number; body: Record<string, unknown> }> {
   const apiKey = envApiKey || process.env.GEMINI_API_KEY || ''
-  const preferredModel = envModel || process.env.GEMINI_MODEL || 'gemini-2.5-flash'
+  const preferredModel = envModel || process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite'
 
   if (!apiKey || !apiKey.trim()) {
     return {
@@ -74,10 +74,13 @@ Guidelines:
 
   const candidateModels = Array.from(new Set([
     preferredModel.trim(),
+    'gemini-3.5-flash-lite',
+    'gemini-3.8-flash',
+    'gemini-3.5-flash',
+    'gemini-2.5-flash-lite',
     'gemini-2.5-flash',
     'gemini-2.0-flash',
-    'gemini-1.5-flash',
-    'gemini-1.5-flash-latest'
+    'gemini-1.5-flash'
   ]))
 
   let lastErrorMsg = ''
