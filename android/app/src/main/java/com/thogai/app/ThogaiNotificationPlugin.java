@@ -132,6 +132,80 @@ public class ThogaiNotificationPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void markDetectedPaymentRead(PluginCall call) {
+        String id = call.getString("id");
+        if (id == null) {
+            call.reject("Missing payment ID");
+            return;
+        }
+
+        try {
+            SharedPreferences prefs = getContext().getSharedPreferences(
+                PaymentNotificationListener.PREFS_NAME,
+                Context.MODE_PRIVATE
+            );
+            String jsonStr = prefs.getString(PaymentNotificationListener.KEY_DETECTED, "[]");
+            JSONArray array = new JSONArray(jsonStr);
+            JSONArray updated = new JSONArray();
+
+            for (int i = 0; i < array.length(); i++) {
+                JSONObject obj = array.getJSONObject(i);
+                if (id.equals(obj.optString("id"))) {
+                    obj.put("read", true);
+                }
+                updated.put(obj);
+            }
+
+            prefs.edit().putString(PaymentNotificationListener.KEY_DETECTED, updated.toString()).apply();
+            JSObject ret = new JSObject();
+            ret.put("success", true);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Failed to mark payment read", e);
+        }
+    }
+
+    @PluginMethod
+    public void markAllDetectedPaymentsRead(PluginCall call) {
+        try {
+            SharedPreferences prefs = getContext().getSharedPreferences(
+                PaymentNotificationListener.PREFS_NAME,
+                Context.MODE_PRIVATE
+            );
+            String jsonStr = prefs.getString(PaymentNotificationListener.KEY_DETECTED, "[]");
+            JSONArray array = new JSONArray(jsonStr);
+            JSONArray updated = new JSONArray();
+
+            for (int i = 0; i < array.length(); i++) {
+                JSONObject obj = array.getJSONObject(i);
+                obj.put("read", true);
+                updated.put(obj);
+            }
+
+            prefs.edit().putString(PaymentNotificationListener.KEY_DETECTED, updated.toString()).apply();
+            JSObject ret = new JSObject();
+            ret.put("success", true);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Failed to mark all payments read", e);
+        }
+    }
+
+    @PluginMethod
+    public void scheduleTestDailyReminder(PluginCall call) {
+        int seconds = call.getInt("seconds", 5);
+        try {
+            DailyReminderReceiver.scheduleTestAlarm(getContext(), seconds);
+            JSObject ret = new JSObject();
+            ret.put("success", true);
+            ret.put("seconds", seconds);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Failed to schedule test daily reminder", e);
+        }
+    }
+
+    @PluginMethod
     public void scheduleDailyReminder(PluginCall call) {
         boolean enabled = call.getBoolean("enabled", true);
         String timeStr = call.getString("time", "20:30");

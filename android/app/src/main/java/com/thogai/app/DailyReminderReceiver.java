@@ -9,25 +9,27 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
+import android.util.Log;
 import androidx.core.app.NotificationCompat;
 
 import java.util.Calendar;
 
 public class DailyReminderReceiver extends BroadcastReceiver {
-    private static final String CHANNEL_REMINDERS = "thogai_reminders";
+    private static final String TAG = "THOGAI_DailyReminder";
+    private static final String CHANNEL_REMINDERS = "thogai_daily_reminders_v2";
     public static final String ACTION_DAILY = "com.thogai.app.DAILY_REMINDER";
 
     @Override
     public void onReceive(Context context, Intent intent) {
         if (intent == null) return;
         String action = intent.getAction();
+        Log.i(TAG, "DailyReminder onReceive triggered with action: " + action);
 
         SharedPreferences prefs = context.getSharedPreferences(PaymentNotificationListener.PREFS_NAME, Context.MODE_PRIVATE);
         boolean enabled = prefs.getBoolean("daily_reminder_enabled", true);
         String timeStr = prefs.getString("daily_reminder_time", "20:30");
 
         if (Intent.ACTION_BOOT_COMPLETED.equals(action)) {
-            // Restore scheduled alarm on reboot
             if (enabled) {
                 scheduleAlarm(context, timeStr);
             }
@@ -37,7 +39,7 @@ public class DailyReminderReceiver extends BroadcastReceiver {
         if (ACTION_DAILY.equals(action)) {
             if (enabled) {
                 showDailyNotification(context);
-                // Schedule next day's alarm
+                // Reschedule for next day
                 scheduleAlarm(context, timeStr);
             }
         }
@@ -53,7 +55,9 @@ public class DailyReminderReceiver extends BroadcastReceiver {
             String[] parts = timeStr.split(":");
             hour = Integer.parseInt(parts[0].trim());
             minute = Integer.parseInt(parts[1].trim());
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            Log.e(TAG, "Error parsing timeStr: " + timeStr, e);
+        }
 
         Calendar cal = Calendar.getInstance();
         cal.set(Calendar.HOUR_OF_DAY, hour);
@@ -61,13 +65,14 @@ public class DailyReminderReceiver extends BroadcastReceiver {
         cal.set(Calendar.SECOND, 0);
         cal.set(Calendar.MILLISECOND, 0);
 
-        // If today's time has already passed, schedule for tomorrow
-        if (cal.getTimeInMillis() <= System.currentTimeMillis()) {
+        // If today's time has already passed or is within next 10 seconds, schedule for tomorrow
+        if (cal.getTimeInMillis() <= System.currentTimeMillis() + 10000) {
             cal.add(Calendar.DAY_OF_YEAR, 1);
         }
 
         Intent intent = new Intent(context, DailyReminderReceiver.class);
         intent.setAction(ACTION_DAILY);
+        intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
 
         int flags = PendingIntent.FLAG_UPDATE_CURRENT;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -75,10 +80,65 @@ public class DailyReminderReceiver extends BroadcastReceiver {
         }
         PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 1001, intent, flags);
 
+        long triggerAt = cal.getTimeInMillis();
+        Log.i(TAG, "Scheduled next daily reminder at " + cal.getTime() + " (" + triggerAt + ")");
+
+        scheduleAlarmSafely(alarmManager, triggerAt, pendingIntent);
+    }
+
+    public static void scheduleTestAlarm(Context context, int delaySeconds) {
+        AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+        if (alarmManager == null) return;
+
+        Intent intent = new Intent(context, DailyReminderReceiver.class);
+        intent.setAction(ACTION_DAILY);
+        intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(), pendingIntent);
-        } else {
-            alarmManager.set(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(), pendingIntent);
+            flags |= PendingIntent.FLAG_IMMUTABLE;
+        }
+        PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 1003, intent, flags);
+
+        long triggerAt = System.currentTimeMillis() + (Math.max(delaySeconds, 1) * 1000L);
+        Log.i(TAG, "Scheduled test alarm for " + delaySeconds + " seconds in future at " + triggerAt);
+
+        scheduleAlarmSafely(alarmManager, triggerAt, pendingIntent);
+    }
+
+    private static void scheduleAlarmSafely(AlarmManager alarmManager, long triggerAt, PendingIntent pendingIntent) {
+        boolean scheduled = false;
+
+        // Try exact alarm first if supported and permitted
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (alarmManager.canScheduleExactAlarms()) {
+                try {
+                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent);
+                    scheduled = true;
+                    Log.i(TAG, "Successfully scheduled with setExactAndAllowWhileIdle (Android 12+)");
+                } catch (SecurityException se) {
+                    Log.w(TAG, "Exact alarm permission missing or denied, falling back to setAndAllowWhileIdle: " + se.getMessage());
+                }
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            try {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent);
+                scheduled = true;
+                Log.i(TAG, "Successfully scheduled with setExactAndAllowWhileIdle (Android 6-11)");
+            } catch (Exception e) {
+                Log.w(TAG, "setExactAndAllowWhileIdle failed: " + e.getMessage());
+            }
+        }
+
+        // Safe fallback for all Android versions (does not throw SecurityException)
+        if (!scheduled) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent);
+                Log.i(TAG, "Successfully scheduled with setAndAllowWhileIdle fallback");
+            } else {
+                alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent);
+                Log.i(TAG, "Successfully scheduled with standard set fallback");
+            }
         }
     }
 
@@ -95,6 +155,7 @@ public class DailyReminderReceiver extends BroadcastReceiver {
         }
         PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 1001, intent, flags);
         alarmManager.cancel(pendingIntent);
+        Log.i(TAG, "Daily reminder alarm cancelled");
     }
 
     private void showDailyNotification(Context context) {
@@ -105,9 +166,11 @@ public class DailyReminderReceiver extends BroadcastReceiver {
             NotificationChannel channel = new NotificationChannel(
                 CHANNEL_REMINDERS,
                 "Daily Reminders",
-                NotificationManager.IMPORTANCE_DEFAULT
+                NotificationManager.IMPORTANCE_HIGH
             );
             channel.setDescription("Daily evening reminder to review finances and budget");
+            channel.enableVibration(true);
+            channel.enableLights(true);
             manager.createNotificationChannel(channel);
         }
 
@@ -126,10 +189,13 @@ public class DailyReminderReceiver extends BroadcastReceiver {
             .setContentText("Take a moment to record today's expenses and check your budget!")
             .setStyle(new NotificationCompat.BigTextStyle()
                 .bigText("Keeping your finances up-to-date helps you stay in control of your budget. Tap to log today's transactions."))
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent);
 
         manager.notify(2001, builder.build());
+        Log.i(TAG, "Daily notification displayed to user");
     }
 }

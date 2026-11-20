@@ -47,6 +47,16 @@ export function NotificationsModal({ close, onRecordPayment, onOpenBudget, onOpe
     setNotifications([])
   }
 
+  const handleToggleRead = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    const target = notifications.find(n => n.id === id)
+    if (!target) return
+    if (!target.read) {
+      notificationService.markAsRead(id)
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
+    }
+  }
+
   const handleDelete = (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
     notificationService.deleteNotification(id)
@@ -197,7 +207,7 @@ export function NotificationsModal({ close, onRecordPayment, onOpenBudget, onOpe
                 <div
                   key={item.id}
                   className={`notif-item ${!item.read ? 'unread' : ''}`}
-                  onClick={() => notificationService.markAsRead(item.id)}
+                  onClick={() => handleToggleRead(item.id)}
                 >
                   <div className={`notif-type-icon ${item.type}`}>
                     <Icon size={16} />
@@ -255,14 +265,27 @@ export function NotificationsModal({ close, onRecordPayment, onOpenBudget, onOpe
                       </div>
                     )}
                   </div>
-                  <button
-                    type="button"
-                    className="notif-del-btn"
-                    onClick={(e) => handleDelete(item.id, e)}
-                    title="Dismiss"
-                  >
-                    <X size={14} />
-                  </button>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
+                    {!item.read && (
+                      <button
+                        type="button"
+                        className="notif-del-btn"
+                        onClick={(e) => handleToggleRead(item.id, e)}
+                        title="Mark as read"
+                        style={{ color: 'var(--accent)' }}
+                      >
+                        <Check size={14} />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="notif-del-btn"
+                      onClick={(e) => handleDelete(item.id, e)}
+                      title="Dismiss"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
                 </div>
               )
             })

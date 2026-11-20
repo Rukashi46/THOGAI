@@ -10,7 +10,7 @@ import {
   HeartPulse, GraduationCap, Film, Plane, Users, Repeat, Smile, Cookie, Receipt, Briefcase,
   Laptop, Building2, Coins, Award, Gift, Handshake, PiggyBank, CreditCard,
   FileText, Upload, CheckCircle2, AlertCircle, MinusCircle, FileSpreadsheet,
-  Scale, History, ArrowRight, ArrowLeft, ChevronLeft, ExternalLink
+  Scale, History, ArrowRight, ArrowLeft, ChevronLeft, ExternalLink, Clock
 } from 'lucide-react'
 import { categorySpend, currencies, formatMoney, groupByDate, groupByMonth, labelDate, monthKey, newId, seedBudgets, snapshot, budgetState, getAccountBalances, getTotalStartingBalance } from './lib/finance'
 import {
@@ -2731,6 +2731,20 @@ function ConfigPage({
             >
               <Sparkles size={14} /> Send test notification
             </button>
+            {isNativePlatform() && (
+              <button
+                type="button"
+                className="button ghost compact"
+                onClick={async () => {
+                  await notificationService.scheduleTestDailyReminder(5)
+                  toast('Reminder scheduled for 5 seconds! Close the app now to test.')
+                }}
+                style={{ fontSize: 12 }}
+                title="Schedules daily reminder alarm in 5 seconds so you can close the app and verify the background alarm"
+              >
+                <Clock size={14} /> Test reminder in 5s (close app)
+              </button>
+            )}
           </div>
         </div>
 

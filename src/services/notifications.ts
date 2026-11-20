@@ -13,11 +13,14 @@ export interface ThogaiNotification {
     amount?: number
     merchant?: string
     category?: string
+    alertKey?: string
+    nativeId?: string
     [key: string]: unknown
   }
 }
 
 const STORAGE_KEY = 'thogai.notifications.v1'
+const DISMISSED_KEYS_STORAGE = 'thogai.dismissed_notifs.v1'
 
 class NotificationManager {
   private getPlugin() {
@@ -25,6 +28,38 @@ class NotificationManager {
       return (Capacitor.Plugins as any).ThogaiNotification
     }
     return null
+  }
+
+  public getDismissedKeys(): Set<string> {
+    try {
+      const raw = localStorage.getItem(DISMISSED_KEYS_STORAGE)
+      if (!raw) return new Set()
+      const arr = JSON.parse(raw)
+      return new Set(Array.isArray(arr) ? arr : [])
+    } catch {
+      return new Set()
+    }
+  }
+
+  public addDismissedKey(key: string): void {
+    if (!key) return
+    const set = this.getDismissedKeys()
+    set.add(key)
+    try {
+      const arr = Array.from(set).slice(-250)
+      localStorage.setItem(DISMISSED_KEYS_STORAGE, JSON.stringify(arr))
+    } catch {}
+  }
+
+  public addDismissedKeys(keys: string[]): void {
+    const set = this.getDismissedKeys()
+    for (const k of keys) {
+      if (k) set.add(k)
+    }
+    try {
+      const arr = Array.from(set).slice(-250)
+      localStorage.setItem(DISMISSED_KEYS_STORAGE, JSON.stringify(arr))
+    } catch {}
   }
 
   public getStoredNotifications(): ThogaiNotification[] {
@@ -57,22 +92,62 @@ class NotificationManager {
   }
 
   public markAsRead(id: string): void {
-    const list = this.getStoredNotifications().map(n => n.id === id ? { ...n, read: true } : n)
+    const list = this.getStoredNotifications().map(n => {
+      if (n.id === id) {
+        if (n.data?.nativeId) {
+          const plugin = this.getPlugin()
+          if (plugin && typeof plugin.markDetectedPaymentRead === 'function') {
+            plugin.markDetectedPaymentRead({ id: n.data.nativeId }).catch(() => {})
+          }
+        }
+        return { ...n, read: true }
+      }
+      return n
+    })
     this.saveNotifications(list)
   }
 
   public markAllAsRead(): void {
     const list = this.getStoredNotifications().map(n => ({ ...n, read: true }))
     this.saveNotifications(list)
+    const plugin = this.getPlugin()
+    if (plugin && typeof plugin.markAllDetectedPaymentsRead === 'function') {
+      plugin.markAllDetectedPaymentsRead().catch(() => {})
+    }
   }
 
   public deleteNotification(id: string): void {
-    const list = this.getStoredNotifications().filter(n => n.id !== id)
+    const current = this.getStoredNotifications()
+    const target = current.find(n => n.id === id)
+    if (target) {
+      if (target.data?.alertKey) {
+        this.addDismissedKey(String(target.data.alertKey))
+      }
+      if (target.data?.nativeId) {
+        const nativeId = String(target.data.nativeId)
+        this.addDismissedKey(nativeId)
+        const plugin = this.getPlugin()
+        if (plugin && typeof plugin.clearDetectedPayment === 'function') {
+          plugin.clearDetectedPayment({ id: nativeId }).catch(() => {})
+        }
+      }
+      this.addDismissedKey(id)
+    }
+    const list = current.filter(n => n.id !== id)
     this.saveNotifications(list)
   }
 
   public clearAll(): void {
+    const current = this.getStoredNotifications()
+    const keysToDismiss: string[] = []
+    for (const n of current) {
+      keysToDismiss.push(n.id)
+      if (n.data?.alertKey) keysToDismiss.push(String(n.data.alertKey))
+      if (n.data?.nativeId) keysToDismiss.push(String(n.data.nativeId))
+    }
+    this.addDismissedKeys(keysToDismiss)
     this.saveNotifications([])
+
     const plugin = this.getPlugin()
     if (plugin && typeof plugin.clearAllDetectedPayments === 'function') {
       plugin.clearAllDetectedPayments().catch(() => {})
@@ -122,10 +197,24 @@ class NotificationManager {
       const res = await plugin.getDetectedPayments()
       const payments = res?.payments || []
       const currentList = this.getStoredNotifications()
+      const dismissed = this.getDismissedKeys()
       let hasNew = false
 
       for (const p of payments) {
-        const exists = currentList.some(n => n.data?.nativeId === p.id || (n.data?.amount === p.amount && Math.abs(n.timestamp - p.timestamp) < 60000))
+        // If user already dismissed or cleared this payment, purge from native and skip
+        if (dismissed.has(p.id) || dismissed.has('det_' + p.id)) {
+          if (typeof plugin.clearDetectedPayment === 'function') {
+            plugin.clearDetectedPayment({ id: p.id }).catch(() => {})
+          }
+          continue
+        }
+
+        const exists = currentList.some(
+          n => n.id === ('det_' + p.id) ||
+               n.data?.nativeId === p.id ||
+               (n.data?.amount === p.amount && Math.abs(n.timestamp - p.timestamp) < 60000)
+        )
+
         if (!exists) {
           const formatted = Number(p.amount).toFixed(2).replace(/\.00$/, '')
           const item: ThogaiNotification = {
@@ -134,7 +223,7 @@ class NotificationManager {
             body: `Paid to ${p.merchant}. Tap to categorize & record.`,
             type: 'payment_detected',
             timestamp: p.timestamp || Date.now(),
-            read: false,
+            read: !!p.read,
             data: {
               nativeId: p.id,
               amount: p.amount,
@@ -190,6 +279,20 @@ class NotificationManager {
   }
 
   /**
+   * Schedule a test daily reminder in N seconds (allows testing when closing app)
+   */
+  public async scheduleTestDailyReminder(seconds = 5): Promise<void> {
+    const plugin = this.getPlugin()
+    if (plugin && typeof plugin.scheduleTestDailyReminder === 'function') {
+      try {
+        await plugin.scheduleTestDailyReminder({ seconds })
+      } catch (err) {
+        console.warn('Error scheduling test daily reminder:', err)
+      }
+    }
+  }
+
+  /**
    * Post a custom notification (fires system notification on Android/Web + stores in-app)
    */
   public async postNotification(
@@ -233,7 +336,7 @@ class NotificationManager {
   }
 
   /**
-   * Evaluate budgets & dues to generate in-app alert notifications
+   * Evaluate budgets & dues to generate in-app alert notifications safely
    */
   public evaluateBudgetAndDueAlerts(
     budgets: Budget[],
@@ -244,6 +347,7 @@ class NotificationManager {
   ): void {
     const todayKey = new Date().toISOString().slice(0, 10)
     const stored = this.getStoredNotifications()
+    const dismissed = this.getDismissedKeys()
 
     // 1. Budget Alerts
     if (enabledBudgetAlerts && budgets.length > 0) {
@@ -254,7 +358,7 @@ class NotificationManager {
 
         if (pct >= 100) {
           const alertId = `budget_over_${b.category}_${todayKey}`
-          if (!stored.some(n => n.data?.alertKey === alertId)) {
+          if (!dismissed.has(alertId) && !stored.some(n => n.data?.alertKey === alertId)) {
             this.addNotification({
               title: `Budget Limit Exceeded: ${b.category}`,
               body: `You've spent ${currencySymbol}${spent.toFixed(2)} (${Math.round(pct)}%) of your ${currencySymbol}${b.limit} limit.`,
@@ -264,7 +368,7 @@ class NotificationManager {
           }
         } else if (pct >= 85) {
           const alertId = `budget_near_${b.category}_${todayKey}`
-          if (!stored.some(n => n.data?.alertKey === alertId)) {
+          if (!dismissed.has(alertId) && !stored.some(n => n.data?.alertKey === alertId)) {
             this.addNotification({
               title: `Budget Alert: ${b.category}`,
               body: `You've used ${Math.round(pct)}% of your monthly budget (${currencySymbol}${Math.max(0, b.limit - spent).toFixed(2)} remaining).`,
@@ -282,7 +386,7 @@ class NotificationManager {
       for (const r of rec) {
         if (r.totalOwed > 0) {
           const alertId = `due_${r.person.toLowerCase()}_${todayKey}`
-          if (!stored.some(n => n.data?.alertKey === alertId)) {
+          if (!dismissed.has(alertId) && !stored.some(n => n.data?.alertKey === alertId)) {
             this.addNotification({
               title: `Pending Due: ${r.person}`,
               body: `${r.person} owes you ${currencySymbol}${r.totalOwed.toFixed(2)}. Tap to copy a friendly reminder or settle.`,
